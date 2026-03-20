@@ -31,6 +31,7 @@ export CWD=$(pwd)
 echo "[$SHELL] CWD: "$CWD
 
 echo "running calculate_pre_feature_for_support.py val"
+source venv/bin/activate
 python ./train.py ./configs/thumos_i3d.yaml --output reproduce
 
 echo "FINISHED calculate_pre_feature_for_support.py val"
