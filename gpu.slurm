@@ -30,8 +30,8 @@ conda activate condenser
 export CWD=$(pwd)
 echo "[$SHELL] CWD: "$CWD
 
-echo "running calculate_pre_feature_for_support.py val"
+echo "running train.py"
 source venv/bin/activate
 python ./train.py ./configs/thumos_i3d.yaml --output reproduce
 
-echo "FINISHED calculate_pre_feature_for_support.py val"
+echo "FINISHED training"
