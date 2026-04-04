@@ -24,9 +24,6 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 echo $CUDA_VISIBLE_DEVICES
 nvidia-smi
 
-conda init
-conda activate condenser
-
 export CWD=$(pwd)
 echo "[$SHELL] CWD: "$CWD
 
