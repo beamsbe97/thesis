@@ -28,6 +28,7 @@ export CWD=$(pwd)
 echo "[$SHELL] CWD: "$CWD
 
 echo "running train.py"
+conda init
 conda activate thesis_env
 python ./train.py ./configs/thumos_i3d.yaml --output reproduce
 
