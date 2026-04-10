@@ -30,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "running train.py"
 conda init
 conda activate thesis_env
-python ./train.py ./configs/thumos_i3d.yaml --output reproduce
+python ./train.py ./configs/epic_slowfast_verb.yaml --output reproduce
 
 echo "FINISHED training"
