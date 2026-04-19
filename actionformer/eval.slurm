@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#SBATCH --job-name=eval
+#SBATCH --job-name=eval_noun
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
