@@ -31,7 +31,5 @@ echo "running train.py"
 conda init
 conda activate thesis_env
 python ./train.py ./configs/epic_slowfast_verb.yaml --output reproduce
-pwd
-ls
 
 echo "FINISHED training"
