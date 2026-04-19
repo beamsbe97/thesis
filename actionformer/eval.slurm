@@ -31,7 +31,5 @@ echo "running eval.py"
 conda init
 conda activate thesis_env
 python ./eval.py ./configs/epic_slowfast_verb.yaml ./ckpt/epic_slowfast_verb_reproduce
-pwd
-ls
 
 echo "FINISHED Evaluation"
