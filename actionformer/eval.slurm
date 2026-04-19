@@ -30,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "running eval.py"
 conda init
 conda activate thesis_env
-python ./eval.py ./configs/epic_slowfast_noun.yaml ./ckpt/epic_slowfast_verb_reproduce
+python ./eval.py ./configs/epic_slowfast_noun.yaml ./ckpt/epic_slowfast_noun_reproduce
 
 echo "FINISHED Evaluation"
