@@ -13,3 +13,8 @@ Features are extracted from SlowFast pretrained on epickitchens
 1 feature vector per ~0.53 seconds (16/30)
 
 plot the actionformer training curves to see what normal training with SlowFast looks like - done
+
+
+# 22/4
+understand why randomness was used in eval
+call the eval function in train.py (cause its not getting called currently)
