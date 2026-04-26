@@ -61,6 +61,10 @@ def main(args):
     train_dataset = make_dataset(
         cfg['dataset_name'], True, cfg['train_split'], **cfg['dataset']
     )
+
+    val_dataset = make_dataset(
+        cfg['dataset_name'], False, cfg['val_split'], **cfg['dataset']
+    )
     # update cfg based on dataset attributes (fix to epic-kitchens)
     train_db_vars = train_dataset.get_attributes()
     cfg['model']['train_cfg']['head_empty_cls'] = train_db_vars['empty_label_ids']
@@ -69,6 +73,9 @@ def main(args):
     train_loader = make_data_loader(
         train_dataset, True, rng_generator, **cfg['loader'])
 
+    val_loader = make_data_loader(
+        val_dataset, False, None, 1, cfg['loader']['num_workers']
+    )
     """3. create model, optimizer, and scheduler"""
     # model
     model = make_meta_arch(cfg['model_name'], **cfg['model'])
@@ -111,6 +118,18 @@ def main(args):
         pprint(cfg, stream=fid)
         fid.flush()
 
+    det_eval, output_file = None, None
+    if not args.saveonly:
+        val_db_vars = val_dataset.get_attributes()
+        det_eval = ANETdetection(
+            val_dataset.json_file,
+            val_dataset.split[0],
+            tiou_thresholds = val_db_vars['tiou_thresholds']
+        )
+    else:
+        output_file = os.path.join(os.path.split(ckpt_file)[0], 'eval_results.pkl')
+
+
     """4. training / validation loop"""
     print("\nStart training model {:s} ...".format(cfg['model_name']))
 
@@ -132,6 +151,19 @@ def main(args):
             tb_writer=tb_writer,
             print_freq=args.print_freq
         )
+
+        print("After epoch {:d}, running validation...".format(epoch + 1))
+        mAP = valid_one_epoch(
+            val_loader,
+            model_ema.module, # Use EMA weights
+            epoch,
+            evaluator=det_eval,
+            output_file=None,
+            ext_score_file=cfg['test_cfg']['ext_score_file'],
+            tb_writer=tb_writer, # This will log mAP to Tensorboard
+            print_freq=args.print_freq
+        )
+        print(f"Epoch {epoch + 1}: mAP = {mAP:.4f}")
 
         # save ckpt once in a while
         if (
