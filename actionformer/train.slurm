@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#SBATCH --job-name=train_noun
+#SBATCH --job-name=train_verb
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
@@ -30,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "running train.py for nouns"
 conda init
 conda activate thesis_env
-python ./train.py ./configs/epic_slowfast_noun.yaml --output reproduce
+python ./train.py ./configs/epic_slowfast_verb.yaml --output reproduce
 
 echo "FINISHED training"
