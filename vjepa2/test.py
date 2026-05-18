@@ -1,7 +1,12 @@
-import torch
+from transformers import AutoVideoProcessor, AutoModel
 
-# preprocessor
-processor = torch.hub.load('facebookresearch/vjepa2', 'vjepa2_preprocessor')
-# models
-# V-JEPA 2
-vjepa2_vit_large = torch.hub.load('facebookresearch/vjepa2', 'vjepa2_vit_large')
+hf_repo = "facebook/vjepa2-vitl-fpc64-256"
+# facebook/vjepa2-vitl-fpc64-256
+# facebook/vjepa2-vith-fpc64-256
+# facebook/vjepa2-vitg-fpc64-256
+# facebook/vjepa2-vitg-fpc64-384
+
+# "facebook/vjepa2-vitg-fpc64-256"
+
+model = AutoModel.from_pretrained(hf_repo)
+processor = AutoVideoProcessor.from_pretrained(hf_repo)
