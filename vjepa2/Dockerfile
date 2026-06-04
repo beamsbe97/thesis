@@ -22,4 +22,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir torchcodec
 
 COPY . .
-
+CMD ["python", "test.py", "-i", "~/EPIC-KITCHENS", "-o", "embeddings"]
