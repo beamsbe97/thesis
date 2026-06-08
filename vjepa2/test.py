@@ -83,7 +83,7 @@ def main():
         if d.is_dir() and d.name.startswith("P") and "_" in d.name
     ])
 
-    print(f"Found {len(action_folders)} video folder(s)")
+    print(f"Found {len(action_folders)} video folder(s) in {input_dir}")
 
     for i, folder in enumerate(action_folders, 1):
         out_path = output_dir / f"{folder.name}.npz"
