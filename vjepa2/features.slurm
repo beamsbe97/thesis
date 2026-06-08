@@ -11,6 +11,11 @@
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:4g.40gb:1
 
+export APPTAINER_TMPDIR=$SCRATCH/.apptainer-tmp
+export APPTAINER_CACHEDIR=$SCRATCH/.apptainer-cache
+mkdir -p $APPTAINER_TMPDIR
+mkdir -p $APPTAINER_CACHEDIR
+
 module purge
 
 module load ALICE/default
@@ -30,6 +35,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "extracting VJEPA2 feaures"
 
 
-srun apptainer run --nv configv6.sif
+apptainer run --nv ~/thesis/vjepa2/configv6.sif
 
 echo "FINISHED extracting"
