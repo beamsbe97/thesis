@@ -11,10 +11,6 @@
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:4g.40gb:1
 
-export APPTAINER_TMPDIR=$SCRATCH/.apptainer-tmp
-export APPTAINER_CACHEDIR=$SCRATCH/.apptainer-cache
-mkdir -p $APPTAINER_TMPDIR
-mkdir -p $APPTAINER_CACHEDIR
 
 module purge
 
