@@ -11,7 +11,6 @@
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:4g.40gb:1
 
-
 module purge
 
 module load ALICE/default
@@ -31,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "extracting VJEPA2 feaures"
 
 
-apptainer run --nv ~/thesis/vjepa2/v7.sif
+apptainer run --nv ~/thesis/vjepa2/latest.sif
 
 echo "FINISHED extracting"
