@@ -30,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "extracting VJEPA2 feaures"
 
 
-apptainer run --nv v4.sif
+srun apptainer run --nv configv6.sif
 
 echo "FINISHED extracting"
