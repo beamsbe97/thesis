@@ -30,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "extracting VJEPA2 feaures"
 
 
-apptainer exec --nv ~/thesis/vjepa2/latest.sif python test.py -i ~/EPIC-KITCHENS -o ~/EPIC-KITCHENS/embeddings
+apptainer exec --nv ~/thesis/vjepa2/configv6.sif python test.py -i ~/EPIC-KITCHENS -o ~/EPIC-KITCHENS/embeddings
 
 echo "FINISHED extracting"
