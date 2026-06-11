@@ -6,7 +6,7 @@
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
-#SBATCH --time=10:00:00
+#SBATCH --time=20:00:00
 #SBATCH --partition=gpu-a100-80g
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:a100:1
@@ -31,6 +31,6 @@ echo "extracting VJEPA2 feaures"
 
 
 apptainer exec --nv ~/thesis/vjepa2/configv6.sif python features.py -i ~/EPIC-KITCHENS -o ~/EPIC-KITCHENS/embeddings --clip-frame-step 1 \
-  --snippet-stride 30
+  --snippet-stride 16
 
 echo "FINISHED extracting"

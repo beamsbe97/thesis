@@ -44,3 +44,9 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - extract features from v-jepa2 specifically, cause adatad++ has 
 - see how the frames are sampled by v-jepa2 
 - aim for 1 feat vector per half a second (same as slowfast)
+64 frame window, stride of 30frames. clips are 60fps
+
+# 10/6
+- try to extract with 30fps
+- if have features, train with actionformer
+- try to understand

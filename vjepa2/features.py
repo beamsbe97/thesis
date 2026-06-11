@@ -1,21 +1,15 @@
 """
-V-JEPA2 feature extraction for ActionFormer on Epic Kitchens (60 fps).
+V-JEPA2 feature extraction for ActionFormer on Epic Kitchens (Aligned to 30 fps).
 
 Produces one feature vector per snippet at a configurable stride,
 using a sliding window centred on each snippet timestep. This matches
 the feature format ActionFormer expects: a 1-D sequence of clip-level
 vectors at uniform temporal resolution across the full video.
 
-Temporal defaults (matching SlowFast EK-100 feature rate):
-    FPS            = 60
-    CLIP_FRAME_STEP = 2   → each clip covers 64*2/60 ≈ 2.13 s
-    SNIPPET_STRIDE  = 30  → one vector every 30/60 = 0.5 s  (~2 feat/s)
-
-Output per video:
-    feats        : (N, D)  float32   — N snippets, D = model hidden dim
-    timestamps_s : (N,)    float32   — centre time in seconds for each snippet
-    fps          : scalar
-    clip_frame_step, snippet_stride, num_frames : scalars (for reproducibility)
+Temporal defaults adjusted to match SlowFast EK-100 baseline:
+    FPS             = 30  (Downsampled from 60 fps by dropping every other frame)
+    CLIP_FRAME_STEP = 1   → each clip covers 64*1/30 ≈ 2.13 s (Adjustable to 1.07s)
+    SNIPPET_STRIDE  = 16  → one vector every 16/30 ≈ 0.53 s (~1.88 feat/s)
 """
 
 import argparse
@@ -32,12 +26,10 @@ TUBELET_SIZE = 2      # V-JEPA2 temporal patch size
 PATCH_SIZE = 16       # V-JEPA2 spatial patch size
 CROP_SIZE = 256       # expected spatial resolution
 
-# ── Temporal sampling defaults ────────────────────────────────────────────────
-# CLIP_FRAME_STEP = 2  → 64 frames × 2 = 128 raw frames ≈ 2.13 s at 60 fps
-# SNIPPET_STRIDE  = 30 → one feature every 0.5 s  (matches SlowFast EK rate)
-DEFAULT_FPS = 60
-DEFAULT_CLIP_FRAME_STEP = 2
-DEFAULT_SNIPPET_STRIDE = 30
+# ── Aligned 30 fps Temporal defaults ──────────────────────────────────────────
+DEFAULT_FPS = 30
+DEFAULT_CLIP_FRAME_STEP = 1  # 64 frames * 1 = 64 raw frames ≈ 2.13 s at 30 fps
+DEFAULT_SNIPPET_STRIDE = 16  # Matches SlowFast baseline stride exactly
 
 
 # ── Core extraction ───────────────────────────────────────────────────────────
@@ -54,21 +46,6 @@ def extract_feature_sequence(
     """
     Slide a V-JEPA2 clip window across a video and return one feature
     vector per snippet.
-
-    Args:
-        frame_files      : sorted list of Path objects for every raw frame.
-        model            : loaded V-JEPA2 model (eval mode).
-        processor        : matching AutoVideoProcessor.
-        device           : 'cuda' or 'cpu'.
-        clip_frame_step  : raw-frame stride used when sampling the 64 clip
-                           frames (default 2 → ~2.1 s clip at 60 fps).
-        snippet_stride   : number of raw frames between snippet centres
-                           (default 30 → 0.5 s at 60 fps, i.e. ~2 feat/s).
-        fps              : source video frame rate (used for timestamp calc).
-
-    Returns:
-        feats        : float32 tensor of shape (N, D)
-        timestamps_s : float32 array of shape (N,) — centre time per snippet
     """
     total = len(frame_files)
     if total == 0:
@@ -128,9 +105,13 @@ def process_folder(
     snippet_stride: int,
     fps: float,
 ):
-    frame_files = sorted(folder.glob("frame_*.jpg"))
+    # CRITICAL CHANGE: Gather frames and immediately drop every other frame [::2]
+    # This transforms the 60fps frame list directly into a 30fps track.
+    all_raw_frames = sorted(folder.glob("frame_*.jpg"))
+    frame_files = all_raw_frames[::2] 
+    
     if len(frame_files) == 0:
-        raise ValueError(f"No frame_*.jpg files found in {folder}")
+        raise ValueError(f"No frame_*.jpg files found after downsampling in {folder}")
 
     feats, timestamps_s = extract_feature_sequence(
         frame_files=frame_files,
@@ -144,8 +125,8 @@ def process_folder(
 
     np.savez(
         out_path,
-        feats=feats.numpy(),                  # (N, D)  ← what ActionFormer reads
-        timestamps_s=timestamps_s,            # (N,)    ← useful for debugging
+        feats=feats.numpy(),
+        timestamps_s=timestamps_s,
         fps=np.float32(fps),
         clip_frame_step=np.int32(clip_frame_step),
         snippet_stride=np.int32(snippet_stride),
@@ -158,7 +139,7 @@ def process_folder(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract V-JEPA2 features for ActionFormer (Epic Kitchens 60 fps)"
+        description="Extract V-JEPA2 features for ActionFormer (Aligned to SlowFast 30 fps)"
     )
     parser.add_argument("--input",  "-i", type=str, required=True,
                         help="Root directory; recursively finds P*_* action folders.")
@@ -168,27 +149,18 @@ def main():
     parser.add_argument("--device", "-d", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
 
-    # Temporal sampling
+    # Temporal sampling defaults (tuned to the new 30fps framework)
     parser.add_argument(
         "--clip-frame-step", type=int, default=DEFAULT_CLIP_FRAME_STEP,
-        help=(
-            "Raw-frame stride for sampling the 64 clip frames. "
-            "Default 2 → ~2.1 s clip at 60 fps (matches SlowFast temporal window). "
-            "Increase to cover a wider context at lower density."
-        ),
+        help="Frame stride inside the clip window. Set to 1 to match SlowFast's 32 consecutive frame span.",
     )
     parser.add_argument(
         "--snippet-stride", type=int, default=DEFAULT_SNIPPET_STRIDE,
-        help=(
-            "Raw-frame gap between snippet centres. "
-            "Default 30 → one feature every 0.5 s at 60 fps (~2 feat/s, "
-            "matching SlowFast EK-100 feature rate). "
-            "Use 15 for ~4 feat/s (denser, slower)."
-        ),
+        help="Frame shift between adjacent feature vectors. Default 16 matches SlowFast.",
     )
     parser.add_argument(
         "--fps", type=float, default=DEFAULT_FPS,
-        help="Source video frame rate (default 60). Used only for timestamp metadata.",
+        help="Operating framework frame rate (default 30). Used for timestamp calculations.",
     )
 
     args = parser.parse_args()
@@ -203,7 +175,7 @@ def main():
     print(f"Model loaded on {args.device}")
 
     print(
-        f"\nTemporal config:"
+        f"\nTemporal config (30 fps mode):"
         f"\n  clip_frame_step = {args.clip_frame_step}  "
         f"→ clip covers {NUM_FRAMES * args.clip_frame_step / args.fps:.2f} s"
         f"\n  snippet_stride  = {args.snippet_stride}  "
