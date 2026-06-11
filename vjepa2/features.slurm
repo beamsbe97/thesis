@@ -7,9 +7,9 @@
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
 #SBATCH --time=20:00:00
-#SBATCH --partition=gpu-a100-80g
+#SBATCH --partition=gpu-mig-40g
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:4g.40gb:1
 
 module purge
 
@@ -30,7 +30,7 @@ echo "[$SHELL] CWD: "$CWD
 echo "extracting VJEPA2 feaures"
 
 
-apptainer exec --nv ~/thesis/vjepa2/configv6.sif python features.py -i ~/EPIC-KITCHENS -o ~/EPIC-KITCHENS/embeddings --clip-frame-step 1 \
+apptainer exec --nv ~/thesis/vjepa2/configv6.sif python features.py -i ~/kitchen-split -o ~/EPIC-KITCHENS/embeddings --clip-frame-step 1 \
   --snippet-stride 16
 
 echo "FINISHED extracting"
