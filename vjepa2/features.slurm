@@ -9,7 +9,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --partition=gpu-a100-80g
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:4g.a100:1
+#SBATCH --gres=gpu:a100:1
 
 module purge
 
