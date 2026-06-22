@@ -6,7 +6,7 @@
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
-#SBATCH --time=4:00:00
+#SBATCH --time=7:00:00
 #SBATCH --partition=gpu-mig-40g
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:4g.40gb:1
@@ -27,9 +27,9 @@ nvidia-smi
 export CWD=$(pwd)
 echo "[$SHELL] CWD: "$CWD
 
-echo "running train.py for nouns"
+echo "running train.py for verbs"
 conda init
 conda activate thesis_env
-python ./train.py ./configs/epic_slowfast_verb.yaml --output reproduce
+python ./train.py ./configs/epic_vjepa2_verb.yaml --output reproduce
 
 echo "FINISHED training"
