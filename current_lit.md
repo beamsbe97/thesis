@@ -50,3 +50,7 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - try to extract with 30fps
 - if have features, train with actionformer
 - try to understand
+
+# 24/6
+- for 50fps videos, reencode with ffmpeg and then extract features again
+- read up on how neco implements augmentation, think about how we can adapt it to ours
