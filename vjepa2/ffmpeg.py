@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 # --- CONFIGURATION ---
-DATASET_ROOT = Path("~/EPIC-KITCHENS").expanduser()  # Change this to your dataset base path
+DATASET_ROOT = Path("/zfsstore/courses/2025-2026/4343SADL6/g10/EPIC-KITCHENS").expanduser()  # Change this to your dataset base path
 CSV_PATH = Path("~/EPIC-KITCHENS/EPIC_100_video_info.csv").expanduser()
 TARGET_FPS = "60"
 CRF_QUALITY = "20"  # 18-23 is standard. Lower means higher quality/larger file size.
