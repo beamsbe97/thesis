@@ -46,7 +46,7 @@ def verify_dataset():
     for idx, row in target_videos.iterrows():
         video_id = row['video_id']
         participant_id = video_id.split('_')[0]
-        video_path = DATASET_ROOT / participant_id / "videos" / f"{video_id}.mp4"
+        video_path = DATASET_ROOT / participant_id / "videos" / f"{video_id}.MP4"
         print(video_path)
         
         if not video_path.exists():
