@@ -38,8 +38,8 @@ def reencode_videos():
         
         # Construct target paths based on dataset structure
         video_dir = DATASET_ROOT / participant_id / "videos"
-        video_path = video_dir / f"{video_id}.mp4"
-        temp_path = video_dir / f"{video_id}_temp.mp4"
+        video_path = video_dir / f"{video_id}.MP4"
+        temp_path = video_dir / f"{video_id}_temp.MP4"
         
         if not video_path.exists():
             print(f"[{count}/{total_to_process}] Skipped (File not found): {video_path}")
@@ -67,7 +67,7 @@ def reencode_videos():
             
             # Atomic swap to safely overwrite the original file
             temp_path.replace(video_path)
-            print(f" -> Successfully updated {video_id}.mp4")
+            print(f" -> Successfully updated {video_id}.MP4")
             
         except subprocess.CalledProcessError as e:
             print(f" -> Error transcoding {video_id}. Action aborted.")
