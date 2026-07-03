@@ -6,7 +6,7 @@
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
-#SBATCH --time=6:00:00
+#SBATCH --time=20:00:00
 #SBATCH --partition=cpu-zen4
 #SBATCH --ntasks=1
 
