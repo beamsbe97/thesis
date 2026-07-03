@@ -47,7 +47,6 @@ def verify_dataset():
         video_id = row['video_id']
         participant_id = video_id.split('_')[0]
         video_path = DATASET_ROOT / participant_id / "videos" / f"{video_id}.MP4"
-        print(video_path)
         
         if not video_path.exists():
             print(video_path + "NOT FOUND")
