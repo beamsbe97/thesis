@@ -6,7 +6,7 @@
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
-#SBATCH --time=1:00:00
+#SBATCH --time=2:00:00
 #SBATCH --partition=cpu-short
 #SBATCH --ntasks=1
 
@@ -30,5 +30,6 @@ echo "re-encoding videos to 60fps"
 
 
 apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python ffmpeg.py
+ls 
 
 echo "FINISHED extracting"
