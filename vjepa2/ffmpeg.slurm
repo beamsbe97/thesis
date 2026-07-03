@@ -6,8 +6,8 @@
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
-#SBATCH --time=2:00:00
-#SBATCH --partition=cpu-short
+#SBATCH --time=6:00:00
+#SBATCH --partition=cpu-zen4
 #SBATCH --ntasks=1
 
 module purge

@@ -67,7 +67,7 @@ def reencode_videos():
             
             # Atomic swap to safely overwrite the original file
             temp_path.replace(video_path)
-            print(f" -> Successfully updated {video_id}.MP4")
+            print(f" -> Successfully updated {video_id}.MP4", flush=True)
             
         except subprocess.CalledProcessError as e:
             print(f" -> Error transcoding {video_id}. Action aborted.")
