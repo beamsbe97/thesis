@@ -29,6 +29,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "re-encoding videos to 60fps"
 
 
-apptainer exec --nv ~/thesis/vjepa2/configv6.sif python ffmpeg.py
+apptainer exec --nv ~/thesis/vjepa2/configv6.sif python verify.py
 
 echo "FINISHED extracting"
