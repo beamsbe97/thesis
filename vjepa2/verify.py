@@ -50,6 +50,7 @@ def verify_dataset():
         print(video_path)
         
         if not video_path.exists():
+            print(video_path + "NOT FOUND")
             missing_videos.append(video_id)
             continue
             
