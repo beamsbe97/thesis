@@ -69,7 +69,7 @@ def main():
     print(f"Allocating {allocated_cpus} parallel workers based on Slurm environment...\n" + "="*50)
     
     # Run the processing pool
-    with ProcessPoolExecutor(max_workers=allocated_cpus) as executor:
+    with ProcessPoolExecutor(max_workers=32) as executor:
         futures = {executor.submit(process_single_video, task): task for task in tasks}
         
         for count, future in enumerate(as_completed(futures), 1):
