@@ -7,7 +7,7 @@
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
 #SBATCH --cpus-per-task=32
-#SBATCH --time=20:00:00
+#SBATCH --time=2:00:00
 #SBATCH --partition=cpu-zen4
 #SBATCH --ntasks=1
 
@@ -30,7 +30,7 @@ echo "[$SHELL] CWD: "$CWD
 echo "re-encoding videos to 60fps"
 
 
-apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python ffmpeg.py
+apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python verify.py
 ls 
 
 echo "FINISHED extracting"
