@@ -1,11 +1,15 @@
-#!/bin/bash
+#!/bin/bash -l
+
 #SBATCH --job-name=epic_jpg_extract
-#SBATCH --output=extract_jpg_%j.log
-#SBATCH --error=extract_jpg_%j.err
+#SBATCH --output=%x_%j.out
+#SBATCH --error=%x_%j.err
+#SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
+#SBATCH --mail-type="ALL"
+#SBATCH --mem=70G
+#SBATCH --cpus-per-task=8
+#SBATCH --time=5:00:00
+#SBATCH --partition=cpu-short
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8        # Matches the MAX_IO_WORKERS in the Python script
-#SBATCH --mem=24G                # Balanced RAM allocation
-#SBATCH --time=04:00:00          # Standard JPG encoding is fast, 4 hours should be plenty
 
 
 module purge
@@ -27,7 +31,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "re-encoding videos to 60fps"
 
 
-apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python verify.py
-ls 
+apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python extract_rgb.py
 
-echo "FINISHED extracting"
+echo "FINISHED extracting rgb frames"
