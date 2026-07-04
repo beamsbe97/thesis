@@ -5,7 +5,8 @@ import pandas as pd
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # --- CONFIGURATION ---
-DATASET_ROOT = Path("~/done").expanduser()
+DATASET_ROOT = Path("/zfsstore/courses/2025-2026/4343SADL6/g10/EPIC-KITCHENS").expanduser()
+OUTPUT_PATH = Path("~/done").expanduser()
 CSV_PATH = Path("~/EPIC-KITCHENS/EPIC_100_video_info.csv").expanduser()
 FRAME_EXT = ".jpg"  
 
@@ -21,7 +22,7 @@ def extract_frames_for_video(row):
     participant_id = video_id.split('_')[0]
     
     video_path = DATASET_ROOT / participant_id / "videos" / f"{video_id}.MP4"
-    output_dir = DATASET_ROOT / participant_id / "rgb_frames" / video_id
+    output_dir = OUTPUT_PATH / participant_id / "rgb_frames" / video_id
     
     if not video_path.exists():
         return f"❌ Skipped (Video not found): {video_id}"
