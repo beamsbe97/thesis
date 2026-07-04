@@ -8,7 +8,7 @@
 #SBATCH --mem=70G
 #SBATCH --cpus-per-task=32
 #SBATCH --time=2:00:00
-#SBATCH --partition=cpu-zen4
+#SBATCH --partition=cpu-short
 #SBATCH --ntasks=1
 
 module purge
