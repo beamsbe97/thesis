@@ -10,7 +10,6 @@ CSV_PATH = Path("~/EPIC-KITCHENS/EPIC_100_video_info.csv").expanduser()
 FRAME_EXT = ".jpg"  
 
 # High-quality JPEG scale (1-31, lower is better quality. 2 is standard for CV)
-JPEG_QUALITY = "2"  
 
 # DISK I/O SAFETY CAP: Max parallel disk writers. 
 # Keep this around 6-8 on a cluster to avoid dragging down shared file storage.
