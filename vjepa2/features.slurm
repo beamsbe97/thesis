@@ -32,7 +32,7 @@ echo "extracting VJEPA2 feaures"
 
 apptainer exec --nv ~/thesis/vjepa2/configv6.sif python features.py \
   -i ~/done \
-  -o ~/EPIC-KITCHENS/embeddings_32stride \
+  -o ~/EPIC-KITCHENS/embeddings_60fps_32stride \
   --clip-frame-step 1 \
   --snippet-stride 32
 
