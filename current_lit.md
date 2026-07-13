@@ -52,5 +52,17 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - try to understand
 
 # 24/6
-- for 50fps videos, reencode with ffmpeg and then extract features again
+- for 50fps videos, reencode with ffmpeg and then   extract features again
 - read up on how neco implements augmentation, think about how we can adapt it to ours
+
+# 8/7
+- think through why which augmentation works, what it is doing
+- 2 views are teaching that they are the same thing. so think of how augmentation can be done temporally
+- check on the params of the augmentations
+- self-sup : making up learning signal, hard enough to learn, easy enough that it can learn
+- think about whether augment on pixel space or features
+
+
+# 15/7
+- UPDATES: 
+    reencoded videos have about the same expected number of vectors (5% difference on avg)
