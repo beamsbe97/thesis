@@ -6,7 +6,7 @@
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
-#SBATCH --time=60:00:00
+#SBATCH --time=94:00:00
 #SBATCH --partition=gpu-a100-80g
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:a100:1
@@ -30,7 +30,10 @@ echo "[$SHELL] CWD: "$CWD
 echo "extracting VJEPA2 feaures"
 
 
-apptainer exec --nv ~/thesis/vjepa2/configv6.sif python features.py -i ~/done -o ~/EPIC-KITCHENS/embeddings --clip-frame-step 1 \
-  --snippet-stride 16 -c ~/EPIC-KITCHENS/EPIC_100_video_info.csv
+apptainer exec --nv ~/thesis/vjepa2/configv6.sif python features.py \
+  -i ~/done \
+  -o ~/EPIC-KITCHENS/embeddings_32stride \
+  --clip-frame-step 1 \
+  --snippet-stride 32
 
 echo "FINISHED extracting"

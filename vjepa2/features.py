@@ -1,12 +1,13 @@
 """
-V-JEPA2 feature extraction for ActionFormer on Epic Kitchens (Aligned to 30 fps).
-Filtered to target only videos outside the 59-60 fps range via EPIC_100_video_info.csv.
+V-JEPA2 feature extraction for ActionFormer on Epic Kitchens (Native 60 fps).
+
+Processes ALL available video folders without filtering or dropping frames.
+Uses a sliding window centred on each snippet timestep.
 """
 
 import argparse
 import torch
 import numpy as np
-import pandas as pd  # <-- Added for metadata filtering
 from pathlib import Path
 from torchvision.io import read_image
 from transformers import AutoVideoProcessor, AutoModel
@@ -18,10 +19,10 @@ TUBELET_SIZE = 2      # V-JEPA2 temporal patch size
 PATCH_SIZE = 16       # V-JEPA2 spatial patch size
 CROP_SIZE = 256       # expected spatial resolution
 
-# ── Aligned 30 fps Temporal defaults ──────────────────────────────────────────
-DEFAULT_FPS = 30
-DEFAULT_CLIP_FRAME_STEP = 1  
-DEFAULT_SNIPPET_STRIDE = 16  
+# ── Native 60 fps Temporal defaults ──────────────────────────────────────────
+DEFAULT_FPS = 60
+DEFAULT_CLIP_FRAME_STEP = 1  # 64 consecutive frames at 60 fps ≈ 1.07 s context
+DEFAULT_SNIPPET_STRIDE = 32  # Step forward by 32 frames at 60 fps ≈ 0.533 s stride
 
 
 # ── Core extraction ───────────────────────────────────────────────────────────
@@ -35,11 +36,17 @@ def extract_feature_sequence(
     snippet_stride: int = DEFAULT_SNIPPET_STRIDE,
     fps: float = DEFAULT_FPS,
 ) -> tuple[torch.Tensor, np.ndarray]:
+    """
+    Slide a V-JEPA2 clip window across a video and return one feature
+    vector per snippet.
+    """
     total = len(frame_files)
     if total == 0:
         raise ValueError("No frames provided.")
 
+    # Half-span of the clip in raw frames (for centred window)
     half_span = (NUM_FRAMES * clip_frame_step) // 2
+
     all_vecs = []
     centres = list(range(0, total, snippet_stride))
 
@@ -51,9 +58,11 @@ def extract_feature_sequence(
             clip_frame_step,
             dtype=int,
         )
+        # Boundary clamping: reflect-pad at start/end instead of dropping clips
         indices = np.clip(indices, 0, total - 1)
 
         frames = [read_image(str(frame_files[i])) for i in indices]
+        # Pad to NUM_FRAMES with the last frame if clamping collapsed the tail
         while len(frames) < NUM_FRAMES:
             frames.append(frames[-1].clone())
         frames = frames[:NUM_FRAMES]
@@ -64,13 +73,14 @@ def extract_feature_sequence(
         with torch.no_grad():
             embeddings = model.get_vision_features(**inputs)
 
-        emb = embeddings.cpu().squeeze(0)                         
-        T_pos = NUM_FRAMES // TUBELET_SIZE                        
-        S = (CROP_SIZE // PATCH_SIZE) ** 2                        
-        emb = emb.reshape(T_pos, S, -1).mean(dim=(0, 1))         
+        # embeddings: (1, T_pos * S, D)
+        emb = embeddings.cpu().squeeze(0)                         # (T_pos*S, D)
+        T_pos = NUM_FRAMES // TUBELET_SIZE                        # 32
+        S = (CROP_SIZE // PATCH_SIZE) ** 2                        # 256
+        emb = emb.reshape(T_pos, S, -1).mean(dim=(0, 1))         # (D,)
         all_vecs.append(emb)
 
-    feats = torch.stack(all_vecs, dim=0).float()                  
+    feats = torch.stack(all_vecs, dim=0).float()                  # (N, D)
     timestamps_s = np.array(centres, dtype=np.float32) / fps
 
     return feats, timestamps_s
@@ -88,11 +98,11 @@ def process_folder(
     snippet_stride: int,
     fps: float,
 ):
-    all_raw_frames = sorted(folder.glob("frame_*.jpg"))
-    frame_files = all_raw_frames[::2] 
+    # CHANGED: We now load ALL sorted frames directly without dropping any frames ([::2] is removed).
+    frame_files = sorted(folder.glob("frame_*.jpg"))
     
     if len(frame_files) == 0:
-        raise ValueError(f"No frame_*.jpg files found after downsampling in {folder}")
+        raise ValueError(f"No frame_*.jpg files found in {folder}")
 
     feats, timestamps_s = extract_feature_sequence(
         frame_files=frame_files,
@@ -120,58 +130,57 @@ def process_folder(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract V-JEPA2 features for ActionFormer (Targeted Range Mode)"
+        description="Extract V-JEPA2 features for ActionFormer (Native 60 fps, All Videos Mode)"
     )
     parser.add_argument("--input",  "-i", type=str, required=True,
                         help="Root directory containing participant folders (e.g., ~/EPIC-KITCHENS).")
     parser.add_argument("--output", "-o", type=str, required=True,
                         help="Output directory for .npz feature files.")
-    # New argument to point to the video info file
-    parser.add_argument("--video-info", "-c", type=str, default="EPIC_100_video_info.csv",
-                        help="Path to the EPIC_100_video_info.csv metadata file.")
     parser.add_argument("--model",  "-m", type=str, default=HF_REPO)
     parser.add_argument("--device", "-d", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
 
-    parser.add_argument("--clip-frame-step", type=int, default=DEFAULT_CLIP_FRAME_STEP)
-    parser.add_argument("--snippet-stride", type=int, default=DEFAULT_SNIPPET_STRIDE)
-    parser.add_argument("--fps", type=float, default=DEFAULT_FPS)
+    # Native 60 fps temporal parameters
+    parser.add_argument(
+        "--clip-frame-step", type=int, default=DEFAULT_CLIP_FRAME_STEP,
+        help="Frame stride inside the clip window (Default: 1)."
+    )
+    parser.add_argument(
+        "--snippet-stride", type=int, default=DEFAULT_SNIPPET_STRIDE,
+        help="Frame shift between adjacent feature vectors (Default: 32)."
+    )
+    parser.add_argument(
+        "--fps", type=float, default=DEFAULT_FPS,
+        help="Operating framework frame rate (Default: 60)."
+    )
 
     args = parser.parse_args()
 
     input_dir  = Path(args.input)
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    csv_path = Path(args.video_info)
-    if not csv_path.exists():
-        print(f"Error: Metadata file '{csv_path}' not found.")
-        return
-
-    # ── Parse CSV and define target set ───────────────────────────────────────
-    print(f"Parsing metadata from {csv_path}...")
-    df = pd.read_csv(csv_path)
-    # Filter for videos strictly outside the 59-60 fps window
-    target_df = df[(df['fps'] < 59) | (df['fps'] > 60)]
-    target_video_ids = set(target_df['video_id'].unique())
-    print(f"Loaded metadata. Identified {len(target_video_ids)} target video profiles matching criteria.")
 
     print(f"Loading model: {args.model}")
     model     = AutoModel.from_pretrained(args.model).to(args.device).eval()
     processor = AutoVideoProcessor.from_pretrained(args.model)
     print(f"Model loaded on {args.device}")
 
-    # Discover folders matching standard Epic Kitchens structure
-    all_folders = sorted([
+    # CHANGED: We find and process ALL folders matching the name structure on disk
+    action_folders = sorted([
         d for d in input_dir.rglob("*")
         if d.is_dir() and d.name.startswith("P") and "_" in d.name
     ])
     
-    # ── Filter action folders down to matches in our target set ───────────────
-    action_folders = [f for f in all_folders if f.name in target_video_ids]
-    
-    print(f"\nDiscovered {len(all_folders)} total video folders on disk.")
-    print(f"Filtered down to {len(action_folders)} target folders requiring extraction.\n" + "="*60)
+    print(f"\nDiscovered {len(action_folders)} video folder(s) in {input_dir} for processing.\n" + "="*60)
+
+    print(
+        f"\nTemporal config (60 fps native mode):"
+        f"\n  clip_frame_step = {args.clip_frame_step}  "
+        f"→ clip covers {NUM_FRAMES * args.clip_frame_step / args.fps:.2f} s"
+        f"\n  snippet_stride  = {args.snippet_stride}  "
+        f"→ one feature every {args.snippet_stride / args.fps:.3f} s "
+        f"({args.fps / args.snippet_stride:.1f} feat/s)\n" + "="*60
+    )
 
     for i, folder in enumerate(action_folders, 1):
         out_path = output_dir / f"{folder.name}.npz"
