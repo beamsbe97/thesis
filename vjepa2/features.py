@@ -99,7 +99,8 @@ def process_folder(
     fps: float,
 ):
     # CHANGED: We now load ALL sorted frames directly without dropping any frames ([::2] is removed).
-    frame_files = sorted(folder.glob("frame_*.jpg"))
+    all_raw_frames = sorted(folder.glob("frame_*.jpg"))
+    frame_files = all_raw_frames[::2]
     
     if len(frame_files) == 0:
         raise ValueError(f"No frame_*.jpg files found in {folder}")
