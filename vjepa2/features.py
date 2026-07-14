@@ -13,16 +13,16 @@ from torchvision.io import read_image
 from transformers import AutoVideoProcessor, AutoModel
 
 # ── Model defaults ────────────────────────────────────────────────────────────
-HF_REPO = "facebook/vjepa2-vitl-fpc64-256"
-NUM_FRAMES = 64       # frames fed to the model per forward pass
+HF_REPO = "facebook/vjepa2-vitl-fpc32-256-diving48"
+NUM_FRAMES = 32       # frames fed to the model per forward pass
 TUBELET_SIZE = 2      # V-JEPA2 temporal patch size
 PATCH_SIZE = 16       # V-JEPA2 spatial patch size
 CROP_SIZE = 256       # expected spatial resolution
 
 # ── Native 60 fps Temporal defaults ──────────────────────────────────────────
-DEFAULT_FPS = 60
+DEFAULT_FPS = 30
 DEFAULT_CLIP_FRAME_STEP = 1  # 64 consecutive frames at 60 fps ≈ 1.07 s context
-DEFAULT_SNIPPET_STRIDE = 32  # Step forward by 32 frames at 60 fps ≈ 0.533 s stride
+DEFAULT_SNIPPET_STRIDE = 16  # Step forward by 32 frames at 60 fps ≈ 0.533 s stride
 
 
 # ── Core extraction ───────────────────────────────────────────────────────────

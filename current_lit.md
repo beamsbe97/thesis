@@ -59,6 +59,17 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - think through why which augmentation works, what it is doing
 - 2 views are teaching that they are the same thing. so think of how augmentation can be done temporally
 - check on the params of the augmentations
+    size_crops: size of global and local crop
+    nmb_crops: number of global and local crop
+    min_scale_crops: the lower bound for the random area of the global and local crops before resizing
+    max_scale_crops: the upper bound for the random area of the global and local crops before resizing
+    jitter_strength: the strength of jittering for brightness, contrast, saturation and hue
+    min_intersection: minimum percentage of intersection of image ares for two sampled crops from the
+        same picture should have. This makes sure that we can always calculate a loss for each pair of
+        global and local crops.
+    blur_strength: the maximum standard deviation of the Gaussian kernel
+
+    
 - self-sup : making up learning signal, hard enough to learn, easy enough that it can learn
 - think about whether augment on pixel space or features
 
