@@ -3,7 +3,7 @@ train_split: ['training']
 val_split: ['validation']
 dataset: {
   json_file: ./data/epic_kitchens/annotations/epic_kitchens_100_verb.json,
-  feat_folder: ~/EPIC-KITCHENS/embeddings,
+  feat_folder: ~/EPIC-KITCHENS/embeddings_32fpc,
   file_prefix: ~,
   file_ext: .npz,
   num_classes: 97,

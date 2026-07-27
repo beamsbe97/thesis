@@ -77,3 +77,8 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 # 15/7
 - UPDATES: 
     reencoded videos have about the same expected number of vectors (5% difference on avg)
+- TO DO:
+    visualise training losses
+    see if anything wrong with curves
+    check what input size into NeCo is
+    try to understand what augmentation is teaching the model to do
