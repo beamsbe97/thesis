@@ -81,4 +81,7 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
     visualise training losses
     see if anything wrong with curves
     check what input size into NeCo is
+    -- Global crops: sampled from 25%–100% of the original image area, then resized to 518×518.
+  -- Local crops: sampled from 5%–25% of the original image area, then resized to 98×98.
+
     try to understand what augmentation is teaching the model to do
