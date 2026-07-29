@@ -11,6 +11,7 @@ import numpy as np
 from pathlib import Path
 from torchvision.io import read_image
 from transformers import AutoVideoProcessor, AutoModel
+from torchvision.transforms.functional import resize
 
 # ── Model defaults ────────────────────────────────────────────────────────────
 HF_REPO = "facebook/vjepa2-vitl-fpc32-256-diving48"
@@ -61,8 +62,22 @@ def extract_feature_sequence(
         # Boundary clamping: reflect-pad at start/end instead of dropping clips
         indices = np.clip(indices, 0, total - 1)
 
-        frames = [read_image(str(frame_files[i])) for i in indices]
-        # Pad to NUM_FRAMES with the last frame if clamping collapsed the tail
+        # Convert frames to standard PIL Images (or torchvision resized tensors)
+        # to ensure uniform spatial dimensions before stacking
+        
+        
+        raw_frames = [read_image(str(frame_files[i])) for i in indices]
+        
+        # Determine target height and width from the first frame
+        _, target_h, target_w = raw_frames[0].shape
+        
+        frames = []
+        for img in raw_frames:
+            if img.shape[1:] != (target_h, target_w):
+                # Resize outlier frames to match the target frame dimensions
+                img = resize(img, [target_h, target_w])
+            frames.append(img)
+
         while len(frames) < NUM_FRAMES:
             frames.append(frames[-1].clone())
         frames = frames[:NUM_FRAMES]
