@@ -7,9 +7,9 @@
 #SBATCH --mail-type="ALL"
 #SBATCH --mem=70G
 #SBATCH --time=3:00:00
-#SBATCH --partition=gpu-a100-80g
+#SBATCH --partition=gpu-mig-40g
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:4g.40gb:1
 
 module purge
 
