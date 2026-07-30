@@ -80,8 +80,27 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - TO DO:
     visualise training losses
     see if anything wrong with curves
-    check what input size into NeCo is
+
+
+    check what input size into NeCo is 
     -- Global crops: sampled from 25%–100% of the original image area, then resized to 518×518.
-  -- Local crops: sampled from 5%–25% of the original image area, then resized to 98×98.
+    -- Local crops: sampled from 5%–25% of the original image area, then resized to 98×98.
+    -- Color jitter, grayscale, Gaussian blur: remove pixel-level rgb/texture so the network cannot cheat. forcing it to match by semantic, NO appearance shortcut
+    -- two different views (different scale, different crop location, different appearance) to force the model to learn something beyond "match identical pixels," but the loss (patch neighbor consistency) requires that the same underlying image region be represented in both views so you have a supervision target
 
     try to understand what augmentation is teaching the model to do
+
+# 30/7
+- find out what the crop overlap is on average (between global and local)
+
+- augmentation styles:
+    - spatial crops
+    - temporal crops
+    - frame rates
+    - combination of spatial and temporal
+
+- before exp, look at the few temporal crops and see what they look like
+
+- keep in mind the clip size input into the model, since it affects what 25% means
+- also batch size 
+- get the baseline
