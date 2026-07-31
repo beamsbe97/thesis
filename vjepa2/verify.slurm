@@ -22,8 +22,7 @@ module load Miniforge3
 
 echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
-echo $CUDA_VISIBLE_DEVICES
-nvidia-smi
+
 
 export CWD=$(pwd)
 echo "[$SHELL] CWD: "$CWD
@@ -32,7 +31,7 @@ echo "re-encoding videos to 60fps"
 
 
 apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python verify.py\
-  --csv ~/EPIC_100_video_info.csv \
+  --csv ~/EPIC-KITCHENS/EPIC_100_video_info.csv \
   --embeddings ~/EPIC-KITCHENS/embeddings_32fpc
 
 echo "FINISHED verifying"
