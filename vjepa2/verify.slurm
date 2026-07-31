@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#SBATCH --job-name=epic_jpg_extract
+#SBATCH --job-name=verify_embeddings
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
@@ -31,7 +31,7 @@ echo "[$SHELL] CWD: "$CWD
 echo "re-encoding videos to 60fps"
 
 
-apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python verify.py python\
+apptainer exec --bind /zfsstore --nv ~/thesis/vjepa2/configv6.sif python verify.py\
   --csv ~/EPIC_100_video_info.csv \
   --embeddings ~/EPIC-KITCHENS/embeddings_32fpc
 
