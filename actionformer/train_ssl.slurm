@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#SBATCH --job-name=ssl_neco
+#SBATCH --job-name=ssl_neco_slowfast
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
