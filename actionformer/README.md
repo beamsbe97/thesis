@@ -411,6 +411,39 @@ python ./eval.py ./configs/ego4d_omnivore_egovlp.yaml ./pretrained/ego4d_omnivor
 | ActionFormer (O+E)    | 61.03 | 54.15 | 49.79 | 45.17 | 39.88 | 49.99 |
 | ActionFormer (S+O+E)  | 60.85 | 54.16 | 49.60 | 45.12 | 39.87 | 49.92 |
 
+## Self-Supervised Post-Training (NeCo-style)
+This repo has been extended with an *add-on* for self-supervised post-training of the ActionFormer encoder, following [NeCo](https://arxiv.org/abs/2408.11054) ("NeCo: Improving DINOv2's Spatial Representations with Patch Neighbor Consistency", Pariza et al.), adapted from spatial (2D) crops and 2D ROI-Align to **temporal (1D) crops** and a **1D ROI-Align**. The original supervised training / evaluation code is untouched.
+
+**Idea.** For every video we sample *two temporal crops* (views) that are guaranteed to overlap. View 1 is encoded by the *student*, view 2 by an *EMA teacher* (momentum follows a cosine schedule from `0.9995` to `1.0`, NeCo/DINOv2 style). Both multi-scale FPN feature maps are projected position-wise, aligned onto the shared crop-intersection (the temporal ROI) with a 1D ROI-Align (bilinear interpolation into `n_bins` temporal bins), and fused across scales. A SoftSort-based *differentiable* ranking (SoftSort, NeurIPS 2020) produces, for every ROI bin, a soft permutation over a *reference pool* built from the valid bins of the *other* videos in the batch (student features, stop-gradient). The loss enforces that the nearest-neighbor ordering from the student view matches the teacher view (cross entropy on the soft permutations, both directions). No labels are required, so unlabeled videos can be used.
+
+**New files**
+* `libs/datasets/ssl.py` — `SelfSupDataset` (registered as `"sslv1"`): generic video enumeration from a json db, feature loading (`.npy` / `.npz[feats]`), random temporal-window sampling (capped at `max_seq_len`), and `sample_temporal_crops` (guaranteed-overlap two-crop sampler).
+* `libs/modeling/selfsup.py` — core SSL module: `temporal_roi_align`, `SSLProjectionHead` (per-level shared MLP + optional multi-scale mixer), `soft_sort_perm`, `NeCoLoss`, and the `PtTransformerSSL` meta-arch (registered as `"PtTransformerSSL"`; backbone + neck identical to the supervised model, so encoder weights transfer), plus `make_ssl_optimizer` (projection head trains at `head_lr_scale` x encoder lr) and `ema_momentum_schedule`.
+* `train_ssl.py` — SSL training / validation script.
+* `train_ssl.slurm` — example SLURM job script (ALICE cluster, `thesis_env`).
+* `configs/ssl_thumos_i3d.yaml`, `configs/ssl_epic_slowfast_verb.yaml`, `configs/ssl_epic_vjepa2_verb.yaml`.
+
+**How views are formed.** Each view is sliced from the video's feature grid (raw coordinates), zero-padded to a multiple of `max_div_factor` (e.g. `576` for `n_mha_win_size: 19`, `256` for `n_mha_win_size: 9`, required by the multi-scale / local-attention transformer), and capped at `max_seq_len`. A bool `(B, 1, P)` mask is carried through the encoder (masked convs / masked attention). Per FPN level, the ROI is converted to the level's coordinate system via `/stride`, where `stride = 2^(level + fpn_start_level)` for the `identity` neck and `1.0` for the `fpn` neck.
+
+**Training.** Requires `batch_size >= 2` (reference pool from other videos).
+```shell
+# manual
+python ./train_ssl.py ./configs/ssl_epic_slowfast_verb.yaml --output neco
+python ./train_ssl.py ./configs/ssl_epic_vjepa2_verb.yaml --output neco_vjepa2
+# on the cluster
+sbatch train_ssl.slurm
+```
+Warm-start the encoder from a supervised (or previous SSL) checkpoint; only `backbone.*` / `neck.*` weights are copied, the projection `head.*` keeps its random init:
+```shell
+python ./train_ssl.py ./configs/ssl_epic_slowfast_verb.yaml \
+    --init-encoder ./ckpt/epic_slowfast_verb_reproduce/model_best.pth.tar --output neco_warm
+```
+Monitor with TensorBoard (`train/final_loss`, `train/neco_top1_agreement`, `train/learning_rate`, `train/ema_momentum`, `validation/*`).
+
+**Loss dispatch.** `make_ssl_loss(method, ssl_cfg)` returns the `neco` loss and reserves `dino`, `byol`, `masked` behind `SUPPORTED_SSL_METHODS` (raise `NotImplementedError`) so future objectives can be added without touching the training loop. Select at runtime with `--ssl-method {neco,dino,byol,masked}` (default from `cfg['ssl']['method']`).
+
+**Fine-tuning.** Checkpoints store the EMA teacher in `state_dict_ema` (plus student `state_dict`, `optimizer`, `scheduler`). To fine-tune supervised downstream, load the EMA weights into `LocPointTransformer` (keys match; drop the extra `head.*` parameters). This is the same path used by `--init-encoder` in reverse.
+
 ## Training and Evaluating Your Own Dataset
 Work in progress. Stay tuned.
 

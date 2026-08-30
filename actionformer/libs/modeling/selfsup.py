@@ -444,32 +444,50 @@ def make_ssl_optimizer(model, opt_cfg, head_lr_scale=1.0):
 
     lr = opt_cfg['learning_rate']
     wd = opt_cfg['weight_decay']
+    # group parameters by FULL NAME with the exact classification of
+    # libs.utils.make_optimizer (skip the root module: named_modules()
+    # re-reports every parameter there with a wrong module type, and no
+    # 'else' catch-all so container passes never classify child weights):
     # [enc_decay, enc_no_decay, head_decay, head_no_decay]
-    groups = [[], [], [], []]
+    groups = [set(), set(), set(), set()]
     for mn, m in model.named_modules():
-        is_head = mn.split('.')[0] == 'head'
-        gi0, gi1 = (2, 3) if is_head else (0, 1)
+        if mn == '':
+            continue
         for pn, p in m.named_parameters():
             if not p.requires_grad:
                 continue
+            fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
+            is_head = mn.split('.')[0] == 'head'
+            gi0, gi1 = (2, 3) if is_head else (0, 1)
             if pn.endswith('bias'):
-                groups[gi1].append(p)
+                groups[gi1].add(fpn)
             elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
-                groups[gi0].append(p)
+                groups[gi0].add(fpn)
             elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
-                groups[gi1].append(p)
+                groups[gi1].add(fpn)
             elif pn.endswith('scale') and isinstance(m, (Scale, AffineDropPath)):
-                groups[gi1].append(p)
+                groups[gi1].add(fpn)
             elif pn.endswith('rel_pe'):
-                groups[gi1].append(p)
-            else:
-                groups[gi1].append(p)
+                groups[gi1].add(fpn)
+
+    # every (requires-grad) parameter must appear in exactly one group
+    param_dict = {pn: p for pn, p in model.named_parameters()}
+    union_params = set()
+    for g in groups:
+        assert len(g & union_params) == 0, "parameters in >1 param group"
+        union_params |= g
+    assert len(param_dict.keys() - union_params) == 0, \
+        "parameters were not separated into any param group"
 
     optim_groups = [
-        {'params': groups[0], 'lr': lr, 'weight_decay': wd},
-        {'params': groups[1], 'lr': lr, 'weight_decay': 0.0},
-        {'params': groups[2], 'lr': lr * head_lr_scale, 'weight_decay': wd},
-        {'params': groups[3], 'lr': lr * head_lr_scale, 'weight_decay': 0.0},
+        {'params': [param_dict[pn] for pn in sorted(groups[0])],
+         'lr': lr, 'weight_decay': wd},
+        {'params': [param_dict[pn] for pn in sorted(groups[1])],
+         'lr': lr, 'weight_decay': 0.0},
+        {'params': [param_dict[pn] for pn in sorted(groups[2])],
+         'lr': lr * head_lr_scale, 'weight_decay': wd},
+        {'params': [param_dict[pn] for pn in sorted(groups[3])],
+         'lr': lr * head_lr_scale, 'weight_decay': 0.0},
     ]
     optim_groups = [g for g in optim_groups if len(g['params']) > 0]
 
