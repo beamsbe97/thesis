@@ -5,6 +5,7 @@ from . import backbones      # backbones
 from . import necks          # necks
 from . import loc_generators # location generators
 from . import meta_archs     # full models
+from . import selfsup        # self-supervised (NeCo-style) meta arch, add-on
 
 __all__ = ['MaskedConv1D', 'MaskedMHCA', 'MaskedMHA', 'LayerNorm', 
            'TransformerBlock', 'ConvBlock', 'Scale', 'AffineDropPath',

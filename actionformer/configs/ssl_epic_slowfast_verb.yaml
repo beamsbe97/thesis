@@ -1,0 +1,79 @@
+dataset_name: sslv1
+model_name: PtTransformerSSL
+train_split: ['training']
+val_split: ['validation']
+dataset: {
+  json_file: ./data/epic_kitchens/annotations/epic_kitchens_100_verb.json,
+  feat_folder: ./data/epic_kitchens/features,
+  file_prefix: ~,
+  file_ext: .npz,
+  num_classes: 97,
+  input_dim: 2304,
+  feat_stride: 16,
+  num_frames: 32,
+  default_fps: 30,
+  max_seq_len: 2304,
+}
+model: {
+  regression_range: [[0, 4], [2, 8], [4, 16], [8, 32], [16, 64], [32, 10000]],
+  fpn_type: identity,
+  max_buffer_len_factor: 4.0,
+  n_mha_win_size: 9,
+}
+ssl: {
+  method: neco,
+  # temporal ROI Align bins
+  n_bins: 32,
+  # temporal crop / view sampling (relative to the max_seq_len context)
+  crop_scale: [0.4, 1.0],
+  min_overlap: 0.2,
+  min_crop_len: 128,
+  # projection head
+  head: {
+    hidden_dim: 2048,
+    out_dim: 256,
+    num_layers: 3,
+    with_mixer: true,
+    dropout: 0.1,
+  },
+  # NeCo loss
+  loss: {
+    ref_fraction: 0.5,
+    tau_rank: 0.1,
+    tau_perm: 0.1,
+    top_k: 0,
+  },
+  # EMA teacher schedule (cosine)
+  ema: {
+    start_momentum: 0.9995,
+    end_momentum: 1.0,
+  },
+  # projection head lr = head_lr_scale * (encoder lr)
+  head_lr_scale: 10.0,
+}
+opt: {
+  type: AdamW,
+  learning_rate: 0.00002,
+  epochs: 10,
+  warmup: true,
+  warmup_epochs: 2,
+  schedule_type: cosine,
+  weight_decay: 0.05,
+}
+loader: {
+  batch_size: 4,   # NeCo needs >= 2 videos for the reference pool
+  num_workers: 4,
+}
+train_cfg: {
+  dropout: 0.0,
+  droppath: 0.1,
+  clip_grad_l2norm: 1.0,
+}
+test_cfg: {
+  pre_nms_topk: 5000,
+  max_seg_num: 2000,
+  min_score: 0.001,
+  nms_sigma: 0.4,
+  multiclass_nms: True,
+}
+output_folder: ./ckpt_ssl/

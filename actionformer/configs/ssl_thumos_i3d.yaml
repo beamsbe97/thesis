@@ -1,0 +1,76 @@
+dataset_name: sslv1
+model_name: PtTransformerSSL
+train_split: ['validation']
+val_split: ['test']
+dataset: {
+  json_file: ./data/thumos/annotations/thumos14.json,
+  feat_folder: ./data/thumos/i3d_features,
+  file_prefix: ~,
+  file_ext: .npy,
+  num_classes: 20,
+  input_dim: 2048,
+  feat_stride: 4,
+  num_frames: 16,
+  max_seq_len: 2304,
+}
+model: {
+  fpn_type: identity,
+  max_buffer_len_factor: 6.0,
+  n_mha_win_size: 19,
+}
+ssl: {
+  method: neco,
+  # temporal ROI Align bins
+  n_bins: 32,
+  # temporal crop / view sampling (relative to the max_seq_len context)
+  crop_scale: [0.4, 1.0],
+  min_overlap: 0.2,
+  min_crop_len: 128,
+  # projection head
+  head: {
+    hidden_dim: 2048,
+    out_dim: 256,
+    num_layers: 3,
+    with_mixer: true,
+    dropout: 0.1,
+  },
+  # NeCo loss
+  loss: {
+    ref_fraction: 0.5,   # fraction of aligned bins used as references
+    tau_rank: 0.1,       # soft-rank temperature
+    tau_perm: 0.1,       # soft-permutation temperature
+    top_k: 0,            # 0 = use all ranks (nearest-neighbor order)
+  },
+  # EMA teacher schedule (cosine)
+  ema: {
+    start_momentum: 0.9995,
+    end_momentum: 1.0,
+  },
+  # projection head lr = head_lr_scale * (encoder lr)
+  head_lr_scale: 10.0,
+}
+opt: {
+  type: AdamW,
+  learning_rate: 0.00002,
+  epochs: 10,
+  warmup: true,
+  warmup_epochs: 2,
+  schedule_type: cosine,
+  weight_decay: 0.05,
+}
+loader: {
+  batch_size: 4,   # NeCo needs >= 2 videos for the reference pool
+  num_workers: 4,
+}
+train_cfg: {
+  dropout: 0.0,
+  droppath: 0.1,
+  clip_grad_l2norm: 1.0,
+}
+test_cfg: {
+  pre_nms_topk: 2000,
+  max_seg_num: 200,
+  min_score: 0.001,
+  multiclass_nms: True,
+}
+output_folder: ./ckpt_ssl/
