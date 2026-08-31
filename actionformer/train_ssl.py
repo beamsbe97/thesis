@@ -1,6 +1,8 @@
 # python imports
 import argparse
+import glob
 import os
+import re
 import time
 import datetime
 from pprint import pprint
@@ -208,6 +210,39 @@ def _master_device(cfg):
     return torch.device('cuda:%d' % dev)
 
 
+def _find_supervised_ckpt(ckpt_dir, config_name):
+    """
+    Auto-discover the supervised checkpoint for the given config.
+
+    Scans  ckpt_dir  for sub-folders that start with the supervised config
+    name (e.g.  epic_slowfast_verb  for  ssl_epic_slowfast_verb).
+    Returns the path of  model_best.pth.tar  if it exists, otherwise
+    the latest  epoch_NNN.pth.tar  in the newest matching folder.
+    Returns None if nothing is found.
+    """
+    # derive the supervised config name (strip leading "ssl_" if present)
+    sup_name = config_name[4:] if config_name.startswith('ssl_') else config_name
+
+    # look for directories matching  sup_name  or  sup_name_*
+    candidates = glob.glob(os.path.join(ckpt_dir, sup_name + '*'))
+    candidates = sorted(
+        [d for d in candidates if os.path.isdir(d)],
+        key=os.path.getmtime, reverse=True,
+    )
+    if not candidates:
+        return None
+
+    for folder in candidates:
+        best = os.path.join(folder, 'model_best.pth.tar')
+        if os.path.isfile(best):
+            return best
+        epochs = sorted(glob.glob(os.path.join(folder, 'epoch_*.pth.tar')),
+                        key=lambda f: int(re.search(r'epoch_(\d+)', f).group(1)))
+        if epochs:
+            return epochs[-1]
+    return None
+
+
 def load_init_encoder(model, ckpt_path, device):
     """
     Warm-start the SSL encoder from a supervised ActionFormer checkpoint
@@ -307,8 +342,16 @@ def main(args):
 
     """3. create model, teacher (EMA), loss, optimizer, and scheduler"""
 
-    # warm-start the encoder from a supervised (or previous SSL) checkpoint
+    # warm-start the encoder from a supervised (or previous SSL) checkpoint;
+    # auto-discover from ckpt/ if --init-encoder is not provided
     args.init_encoder = getattr(args, 'init_encoder', '')
+    if not args.init_encoder:
+        sup_ckpt = _find_supervised_ckpt(args.ckpt_dir, cfg_filename)
+        if sup_ckpt is not None:
+            args.init_encoder = sup_ckpt
+            print(">> auto-discovered supervised checkpoint: {:s}".format(
+                sup_ckpt))
+
     model = make_meta_arch('PtTransformerSSL', **cfg['model'], ssl_cfg=ssl_cfg)
     if args.init_encoder:
         model = load_init_encoder(
@@ -439,6 +482,9 @@ if __name__ == '__main__':
                         help='validate every N epochs (default: 1)')
     parser.add_argument('--output', default='', type=str,
                         help='name of exp folder (default: none)')
+    parser.add_argument('--ckpt-dir', default='ckpt', type=str,
+                        help='root ckpt folder for auto-discovery '
+                             'of supervised checkpoints (default: ckpt)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to a checkpoint (default: none)')
     parser.add_argument('--init-encoder', default='', type=str, metavar='PATH',
