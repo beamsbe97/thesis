@@ -1,6 +1,6 @@
 #!/bin/bash -l
 
-#SBATCH --job-name=eval_verb
+#SBATCH --job-name=eval_ssl_slowfast
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --mail-user="s4561341@vuw.leidenuniv.nl"
@@ -30,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "running eval.py"
 conda init
 conda activate thesis_env
-python ./eval.py ./configs/epic_vjepa2_verb.yaml ./ckpt/epic_vjepa2_verb_reproduce
+python ./eval.py ./configs/epic_slowfast_verb.yaml ./ckpt/ssl_epic_slowfast_verb_neco
 
 echo "FINISHED Evaluation"
