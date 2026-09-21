@@ -92,6 +92,7 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 
 # 30/7
 - find out what the crop overlap is on average (between global and local)
+     average overlap is ~14–18% of the full image
 
 - augmentation styles:
     - spatial crops
@@ -101,6 +102,15 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 
 - before exp, look at the few temporal crops and see what they look like
 
+
 - keep in mind the clip size input into the model, since it affects what 25% means
 - also batch size 
 - get the baseline
+
+
+#
+- train actionformer NeCo style FIRST and then conduct training AFTER NeCo SSL
+
+- see if the loss curves start lower/same and ends up at the same point
+
+- if theres time, find MAE features or finetuned VJEPA2
