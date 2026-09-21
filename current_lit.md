@@ -108,7 +108,7 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - get the baseline
 
 
-#
+# 10/8
 - train actionformer NeCo style FIRST and then conduct training AFTER NeCo SSL
 
 - see if the loss curves start lower/same and ends up at the same point
