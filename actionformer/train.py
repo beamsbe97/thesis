@@ -18,7 +18,7 @@ from libs.datasets import make_dataset, make_data_loader
 from libs.modeling import make_meta_arch
 from libs.utils import (train_one_epoch, valid_one_epoch, ANETdetection,
                         save_checkpoint, make_optimizer, make_scheduler,
-                        fix_random_seed, ModelEma)
+                        fix_random_seed, ModelEma, load_init_encoder)
 
 
 ################################################################################
@@ -79,6 +79,13 @@ def main(args):
     """3. create model, optimizer, and scheduler"""
     # model
     model = make_meta_arch(cfg['model_name'], **cfg['model'])
+    # optionally warm-start the encoder (backbone + neck) from a NeCo-style
+    # SSL checkpoint (or another supervised checkpoint); task heads keep
+    # their random init and are trained normally below
+    if args.init_encoder:
+        dev = cfg['devices'][0]
+        device = torch.device(dev) if isinstance(dev, str) else torch.device('cuda:%d' % dev)
+        model = load_init_encoder(model, args.init_encoder, device, prefer_ema=True)
     # not ideal for multi GPU training, ok for now
     model = nn.DataParallel(model, device_ids=cfg['devices'])
     # optimizer
@@ -200,5 +207,10 @@ if __name__ == '__main__':
                         help='name of exp folder (default: none)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to a checkpoint (default: none)')
+    parser.add_argument('--init-encoder', default='', type=str, metavar='PATH',
+                        help='warm-start the encoder (backbone+neck) from a '
+                             'NeCo-style SSL checkpoint, then train the full '
+                             'model (encoder + heads) supervised as usual '
+                             '(default: random init)')
     args = parser.parse_args()
     main(args)

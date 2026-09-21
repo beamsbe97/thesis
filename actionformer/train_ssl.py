@@ -21,7 +21,8 @@ from libs.modeling import make_meta_arch
 from libs.modeling.selfsup import (make_ssl_loss, make_ssl_optimizer,
                                    ema_momentum_schedule)
 from libs.utils import (save_checkpoint, make_scheduler,
-                        fix_random_seed, ModelEma, AverageMeter)
+                        fix_random_seed, ModelEma, AverageMeter,
+                        load_init_encoder)
 
 
 ################################################################################
@@ -241,39 +242,6 @@ def _find_supervised_ckpt(ckpt_dir, config_name):
         if epochs:
             return epochs[-1]
     return None
-
-
-def load_init_encoder(model, ckpt_path, device):
-    """
-    Warm-start the SSL encoder from a supervised ActionFormer checkpoint
-    (or a previous SSL run). Only backbone / neck weights are copied
-    (keys starting with 'module.' / 'backbone.' / 'neck.'); the extra
-    'head.' parameters keep their random init.
-    """
-    checkpoint = torch.load(ckpt_path, map_location=device)
-
-    state = checkpoint['state_dict'] if 'state_dict' in checkpoint \
-        else checkpoint
-    # strip the optional DataParallel prefix
-    state = {k[len('module.'):] if k.startswith('module.') else k: v
-             for k, v in state.items()}
-
-    # keep only the shared encoder parameters (drop the head, and drop
-    # any stale supervised heads: cls/reg/center pre-convs)
-    enc = {}
-    for k, v in state.items():
-        if k.startswith('head.'):
-            continue
-        if any(k.startswith(p) for p in ('cls_head', 'reg_head', 'center_head')):
-            continue
-        enc[k] = v
-
-    missing, unexpected = model.load_state_dict(enc, strict=False)
-    print(">> init-encoder: loaded encoder weights from {:s} "
-          "({:d} matched, {:d} missing, {:d} unexpected)".format(
-              ckpt_path, len(enc) - len(unexpected),
-              len(missing), len(unexpected)))
-    return model
 
 
 ################################################################################

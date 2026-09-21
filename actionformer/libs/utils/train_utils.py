@@ -439,3 +439,43 @@ def valid_one_epoch(
         tb_writer.add_scalar('validation/mAP', mAP, curr_epoch)
 
     return mAP
+
+
+################################################################################
+def load_init_encoder(model, ckpt_path, device, prefer_ema=False,
+                       exclude_prefixes=('head.', 'cls_head', 'reg_head',
+                                          'center_head')):
+    """
+    Warm-start a model's shared encoder (backbone + neck) from another
+    ActionFormer checkpoint -- supervised (LocPointTransformer) or
+    self-supervised (PtTransformerSSL); works in either direction, since
+    both meta-archs build `self.backbone` / `self.neck` the same way.
+    Task-specific heads (SSL projection head, or supervised cls/reg/center
+    heads) are dropped and keep their random init in `model`.
+
+    Args:
+        prefer_ema: if True and the checkpoint has a 'state_dict_ema' entry,
+            load from it instead of 'state_dict' (e.g. to pull the trained
+            EMA/teacher encoder out of an SSL checkpoint).
+    """
+    checkpoint = torch.load(ckpt_path, map_location=device)
+
+    if prefer_ema and 'state_dict_ema' in checkpoint:
+        state = checkpoint['state_dict_ema']
+    elif 'state_dict' in checkpoint:
+        state = checkpoint['state_dict']
+    else:
+        state = checkpoint
+    # strip the optional DataParallel prefix
+    state = {k[len('module.'):] if k.startswith('module.') else k: v
+             for k, v in state.items()}
+
+    enc = {k: v for k, v in state.items()
+           if not any(k.startswith(p) for p in exclude_prefixes)}
+
+    missing, unexpected = model.load_state_dict(enc, strict=False)
+    print(">> init-encoder: loaded encoder weights from {:s} "
+          "({:d} matched, {:d} missing, {:d} unexpected)".format(
+              ckpt_path, len(enc) - len(unexpected),
+              len(missing), len(unexpected)))
+    return model
