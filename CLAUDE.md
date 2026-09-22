@@ -82,10 +82,12 @@ backbone+neck weights (from the SSL checkpoint's EMA/teacher state) and
 leaves the cls/reg/center heads at random init, then runs the **unmodified**
 standard supervised recipe end-to-end — i.e. same hyperparameters as the
 paper reproduction (pipeline 1), differing only in the encoder's starting
-point. Currently running on Alice: job 5077230,
-`train_verb_from_ssl.slurm` → `ckpt/epic_slowfast_verb_from_ssl_neco/`.
-Confirmed at start: 207 encoder keys matched, 22 head keys left random,
-0 unexpected (matches the same key split reported for pipeline 2's merge).
+point. **Done**: job 5077230, `train_verb_from_ssl.slurm` →
+`ckpt/epic_slowfast_verb_from_ssl_neco/epoch_021.pth.tar`. Confirmed at start:
+207 encoder keys matched, 22 head keys left random, 0 unexpected (matches the
+same key split reported for pipeline 2's merge). **Result: 23.56 avg mAP —
+beats both the from-scratch baseline (23.07) and the paper's own number
+(23.5)**, at every tIoU threshold. See "Results" below.
 
 ## Architectural decisions
 
@@ -129,7 +131,7 @@ EPIC-100 verb, validation split, mAP @ tIoU (avg of 0.1–0.5):
 | Supervised baseline (repro, SlowFast) | 26.40 | 25.15 | 23.73 | 21.70 | 18.35 | **23.07** |
 | + SSL *post*-training (warm-start, pipeline 2) | 26.14 | 24.70 | 23.20 | 20.93 | 17.79 | **22.55** |
 | Supervised baseline (V-JEPA2) | 20.51 | 19.74 | 18.38 | 16.17 | 12.64 | **17.49** |
-| SSL *pre*-train → supervised (pipeline 3) | — | — | — | — | — | *pending (job 5077230)* |
+| SSL *pre*-train → supervised (pipeline 3) | 26.72 | 25.63 | 24.10 | 22.37 | 18.99 | **23.56** |
 
 SSL training signals:
 
@@ -153,44 +155,42 @@ encoder drifts under the SSL objective, so any representational change isn't
 compensated by the decoder. The SSL loss *does* converge (agreement
 0.565→0.832) — this is a transfer problem, not an optimization failure.
 
-Pipeline 3 (pretrain-then-finetune) is specifically designed to test whether
-that head-mismatch explanation holds: if it does, letting the heads
-train jointly with an SSL-initialized encoder (rather than staying frozen)
-should recover — or exceed — the 23.07 baseline, since nothing here is frozen
-out of the loop.
+Pipeline 3 (pretrain-then-finetune) tested that explanation directly: letting
+the heads train jointly with an SSL-initialized encoder, rather than staying
+frozen, should recover — or exceed — the 23.07 baseline if head mismatch is
+the real culprit.
+
+**It did**: 23.56 avg mAP, +0.49 pp over baseline, +0.06 pp over the paper,
+ahead at every tIoU threshold. Notably, this isn't visible in the *training*
+loss — pipeline 3's supervised loss curve is essentially identical to the
+from-scratch baseline's (same start, same trajectory, same ~0.35 endpoint;
+`actionformer/figs/supervised_loss_comparison.png`). The gain is purely in
+downstream generalization (validation mAP for the same training loss), i.e.
+SSL pretraining is acting as a representation prior, not as an optimization
+head-start. Full write-up: `report.md` §5.1.1, §5.3.
 
 ## Current status
 
-- Job **5077230** (`train_verb_from_ssl`, `gpu-mig-40g`) running on Alice
-  since 2026-09-21, ~7h budget. Confirmed healthy at epoch 0 (loss curve
-  looks like normal supervised training, no key-mismatch errors).
-- All code (`train.py --init-encoder`, `train_ssl.py` refactor,
-  `train_verb_from_ssl.slurm`, `tools/plot_loss_curves.py`) is pushed to
+- Job **5077230** (`train_verb_from_ssl`, `gpu-mig-40g`) **COMPLETED** on
+  Alice 2026-09-21, 1h06m (exit 0, well under the 7h budget). Result:
+  `ckpt/epic_slowfast_verb_from_ssl_neco/epoch_021.pth.tar`, 23.56 avg mAP.
+- All code and the resulting figures/report updates are pushed to
   `origin/main` and present on both this machine and Alice.
+- `report.md` and this file are up to date with pipeline 3's results as of
+  2026-09-22.
 
 ## Next steps
 
-1. **Once job 5077230 finishes**: run `eval.py` on
-   `ckpt/epic_slowfast_verb_from_ssl_neco/` for the mAP row in the Results
-   table above, and:
-   ```
-   python actionformer/tools/plot_loss_curves.py \
-     --run "Supervised (random init)"=actionformer/ckpt/epic_slowfast_verb_reproduce/logs \
-     --run "Supervised (from NeCo SSL init)"=actionformer/ckpt/epic_slowfast_verb_from_ssl_neco/logs \
-     --tag train/final_loss --val-tag validation/mAP \
-     --out actionformer/figs/supervised_loss_comparison.png
-   ```
-   to check the question posed in `current_lit.md`: does the SSL-seeded run
-   start lower/same and converge to the same point, or does it actually beat
-   23.07?
-2. **Write up pipeline 3** as a new section of `report.md` (or a v2),
-   parallel to the existing pipeline-2 write-up, with the same
-   paper-comparison framing.
-3. If pipeline 3 *does* beat the baseline, it directly supports the
-   head-mismatch explanation from §5.1 — worth a short joint-finetune
-   ablation on pipeline 2 (unfreeze the heads for a few epochs after SSL
-   post-training) to test the same hypothesis from the other direction.
-4. Open thread from `current_lit.md`: only one SSL protocol variant
+1. **Ablation on pipeline 2** (post-training): unfreeze the heads for a few
+   epochs after SSL post-training instead of splicing them in frozen, to test
+   the same head-mismatch hypothesis from the other direction — pipeline 3's
+   result predicts this should also recover some of the −0.52 pp lost in
+   §5.1.
+2. Open thread from `current_lit.md`: only one SSL protocol variant
    (temporal crop augmentation) has been tried; alternative augmentation
    styles (frame-rate variation, combined spatial+temporal crops) are noted
    but not yet run.
+3. Consider running V-JEPA2 through the same pretrain→finetune protocol
+   (pipeline 3) — currently only SlowFast has been tested this way; V-JEPA2
+   has only been through the supervised-baseline and post-training (pipeline
+   2, warm) protocols.
