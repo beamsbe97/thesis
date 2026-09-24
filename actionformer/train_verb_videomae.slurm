@@ -30,6 +30,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "running train.py for verbs (VideoMAE-L EPIC-finetuned features, supervised baseline)"
 conda init
 conda activate thesis_env
-python ./train.py ./configs/epic_videomae_verb.yaml --output reproduce
+python -u ./train.py ./configs/epic_videomae_verb.yaml --output reproduce
 
 echo "FINISHED training (VideoMAE-L baseline)"

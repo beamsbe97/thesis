@@ -30,7 +30,7 @@ echo "[$SHELL] CWD: "$CWD
 echo "running train.py for verbs (V-JEPA2, encoder warm-started from untrained-init NeCo SSL)"
 conda init
 conda activate thesis_env
-python ./train.py ./configs/epic_vjepa2_verb.yaml \
+python -u ./train.py ./configs/epic_vjepa2_verb.yaml \
     --init-encoder ./ckpt_ssl/ssl_epic_vjepa2_verb_neco_vjepa2_cold/epoch_012.pth.tar \
     --output from_ssl_neco
 
