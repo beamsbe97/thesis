@@ -79,12 +79,23 @@ def main(args):
     """3. create model, optimizer, and scheduler"""
     # model
     model = make_meta_arch(cfg['model_name'], **cfg['model'])
+    dev = cfg['devices'][0]
+    device = torch.device(dev) if isinstance(dev, str) else torch.device('cuda:%d' % dev)
+    # optionally initialize the *whole* model (encoder + heads) from a
+    # supervised checkpoint's EMA weights -- weights only, unlike --resume
+    # (no optimizer / scheduler / epoch), so a fresh schedule is run on top
+    if args.init_model:
+        checkpoint = torch.load(args.init_model, map_location=device)
+        state = checkpoint.get('state_dict_ema', checkpoint['state_dict'])
+        state = {k[len('module.'):] if k.startswith('module.') else k: v
+                 for k, v in state.items()}
+        model.load_state_dict(state, strict=True)
+        print(">> init-model: loaded full model from {:s}".format(args.init_model))
+        del checkpoint, state
     # optionally warm-start the encoder (backbone + neck) from a NeCo-style
     # SSL checkpoint (or another supervised checkpoint); task heads keep
-    # their random init and are trained normally below
+    # their random init (or the --init-model heads) and are trained below
     if args.init_encoder:
-        dev = cfg['devices'][0]
-        device = torch.device(dev) if isinstance(dev, str) else torch.device('cuda:%d' % dev)
         model = load_init_encoder(model, args.init_encoder, device, prefer_ema=True)
     # not ideal for multi GPU training, ok for now
     model = nn.DataParallel(model, device_ids=cfg['devices'])
@@ -212,5 +223,10 @@ if __name__ == '__main__':
                              'NeCo-style SSL checkpoint, then train the full '
                              'model (encoder + heads) supervised as usual '
                              '(default: random init)')
+    parser.add_argument('--init-model', default='', type=str, metavar='PATH',
+                        help='initialize the full model (encoder + heads) '
+                             'from a supervised checkpoint\'s EMA weights, '
+                             'applied before --init-encoder; weights only, '
+                             'a fresh schedule is run (default: none)')
     args = parser.parse_args()
     main(args)
