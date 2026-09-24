@@ -132,6 +132,8 @@ EPIC-100 verb, validation split, mAP @ tIoU (avg of 0.1–0.5):
 | + SSL *post*-training (warm-start, pipeline 2) | 26.14 | 24.70 | 23.20 | 20.93 | 17.79 | **22.55** |
 | Supervised baseline (V-JEPA2) | 20.51 | 19.74 | 18.38 | 16.17 | 12.64 | **17.49** |
 | SSL *pre*-train → supervised (pipeline 3) | 26.72 | 25.63 | 24.10 | 22.37 | 18.99 | **23.56** |
+| Pipeline 2 + joint fine-tune, heads unfrozen (ablation, final ep.) | 26.15 | 24.78 | 23.14 | 21.21 | 17.83 | **22.45** |
+| Control: baseline + same joint fine-tune, no SSL (final ep.) | 26.41 | 25.16 | 23.55 | 21.52 | 18.22 | **22.97** |
 
 SSL training signals:
 
@@ -169,7 +171,40 @@ downstream generalization (validation mAP for the same training loss), i.e.
 SSL pretraining is acting as a representation prior, not as an optimization
 head-start. Full write-up: `report.md` §5.1.1, §5.3.
 
+### Joint fine-tune ablation on pipeline 2 (2026-09-24) — head mismatch *not* confirmed
+
+Tested head mismatch from the other direction: start from the exact
+pipeline-2 model (SSL post-trained EMA encoder + supervised epoch_021 EMA
+heads), then fine-tune **encoder and heads jointly** with a short schedule
+(`configs/epic_slowfast_verb_joint_ft.yaml`: 1 warmup + 5 cosine epochs,
+lr 2e-5 = 1/5 base). Same schedule on the unmodified baseline as a control.
+Jobs 5093320 (ablation) / 5093321 (control), 21 min each,
+`ckpt/epic_slowfast_verb_joint_ft_{ssl_warm,ctrl}/`.
+
+Per-epoch avg mAP (EMA model):
+
+| Epoch | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| SSL-post + joint FT | 22.48 | 22.47 | 22.52 | 22.61 | 22.60 | 22.45 |
+| Control (no SSL) | 23.02 | 22.98 | 23.02 | 23.01 | 22.94 | 22.97 |
+
+Unfreezing the heads recovers **none** of the pipeline-2 loss: the SSL-post
+model stays at ~22.5 (= the frozen-head 22.55) while the control stays at
+~23.0, a persistent ~0.5 pp gap at every epoch and every tIoU. So within
+this fine-tune budget the damage from SSL post-training lives in the
+*encoder*, not in a head/encoder mismatch that the heads could adapt to.
+Pipeline 3's gain therefore is better explained by *where* SSL sits (as an
+init, followed by a full supervised schedule that can reshape the encoder)
+than by heads being trainable per se. Caveat: short/low-LR fine-tune only;
+a full-length schedule from the SSL-post encoder is the untested remaining
+variant (it would converge toward pipeline 3's protocol).
+
 ## Current status
+
+- 2026-09-24: joint fine-tune ablation (jobs 5093320/5093321) done, see
+  above. V-JEPA2 pipeline 3 submitted: stage A `train_ssl_vjepa2_cold.slurm`
+  → stage B `train_verb_vjepa2_from_ssl.slurm` (chained, `afterok`).
+- Loss-curve figures also exported as JPEG (`actionformer/figs/*.jpg`).
 
 - Job **5077230** (`train_verb_from_ssl`, `gpu-mig-40g`) **COMPLETED** on
   Alice 2026-09-21, 1h06m (exit 0, well under the 7h budget). Result:
@@ -181,16 +216,17 @@ head-start. Full write-up: `report.md` §5.1.1, §5.3.
 
 ## Next steps
 
-1. **Ablation on pipeline 2** (post-training): unfreeze the heads for a few
-   epochs after SSL post-training instead of splicing them in frozen, to test
-   the same head-mismatch hypothesis from the other direction — pipeline 3's
-   result predicts this should also recover some of the −0.52 pp lost in
-   §5.1.
+1. ~~Ablation on pipeline 2: unfreeze the heads~~ — done 2026-09-24, did
+   **not** recover the loss (see "Joint fine-tune ablation"). `report.md`
+   §5.1 still presents head mismatch as the load-bearing explanation and
+   needs revising.
 2. Open thread from `current_lit.md`: only one SSL protocol variant
    (temporal crop augmentation) has been tried; alternative augmentation
    styles (frame-rate variation, combined spatial+temporal crops) are noted
    but not yet run.
-3. Consider running V-JEPA2 through the same pretrain→finetune protocol
-   (pipeline 3) — currently only SlowFast has been tested this way; V-JEPA2
-   has only been through the supervised-baseline and post-training (pipeline
-   2, warm) protocols.
+3. V-JEPA2 through pipeline 3 — **submitted 2026-09-24**, compare against
+   the 17.49 V-JEPA2 supervised baseline.
+4. Pre-extracted EPIC-finetuned VideoMAE-L verb features exist (OpenTAD,
+   1024-d, 16-frame / stride 8 → 2× SlowFast density); OpenTAD's own
+   ActionFormer-SlowFast verb number is 24.93, above our 23.07 repro —
+   worth checking against their SlowFast features.

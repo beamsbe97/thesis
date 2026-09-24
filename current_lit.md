@@ -114,3 +114,12 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - see if the loss curves start lower/same and ends up at the same point
 
 - if theres time, find MAE features or finetuned VJEPA2
+
+# 24/9
+- joint fine-tune ablation on pipeline 2 (SSL post-trained encoder + supervised heads, all unfrozen, 6 ep @ lr 2e-5)
+    - SSL-post + joint FT: 22.45 final (22.45-22.61 over epochs) -- no recovery vs frozen heads (22.55)
+    - control (baseline, same FT, no SSL): 22.97 (22.94-23.02)
+    - => head mismatch is NOT the explanation; SSL post-training hurts the encoder itself
+- launched V-JEPA2 through pipeline 3 (SSL from random init -> supervised)
+- found pre-extracted EPIC-finetuned VideoMAE-L features (OpenTAD), verb + noun sets, 1024-d, stride 8
+    - OpenTAD's ActionFormer SlowFast verb = 24.93 avg mAP (> our 23.07)
