@@ -259,7 +259,8 @@ class PtTransformerSSL(nn.Module):
     self-supervised projection head. Used as both the student and the EMA
     teacher. Exposes:
 
-        forward(x, mask, view_start, roi) -> ((B, N, D) features, (B, N) mask)
+        forward(x, mask, view_start, roi, view_rate=None)
+            -> ((B, N, D) features, (B, N) mask)
 
     where `x` is a batch of *one temporal view* (already sliced + padded to a
     multiple of max_div_factor) and `roi` the shared crop-intersection in the
@@ -388,7 +389,7 @@ class PtTransformerSSL(nn.Module):
         fpn_feats, fpn_masks = self.neck(feats, masks)
         return fpn_feats, fpn_masks
 
-    def forward_view(self, x, mask, view_start, roi):
+    def forward_view(self, x, mask, view_start, roi, view_rate=None):
         """
         Encode ONE temporal view, project it (position-wise), ROI-align every
         FPN level onto the shared temporal ROI and fuse the scales.
@@ -397,6 +398,8 @@ class PtTransformerSSL(nn.Module):
         mask:       (B, 1, P) bool
         view_start: (B,) float, raw-coordinate start s_v of this view
         roi:        (B, 2) float, raw-coordinate intersection (shared ROI)
+        view_rate:  (B,) float or None, playback rate r_v of this view: view
+                    index j sits at raw position s_v + j * r_v (None = 1)
 
         Returns ((B, N, D) L2-normalized features, (B, N) bool valid mask).
         """
@@ -410,6 +413,8 @@ class PtTransformerSSL(nn.Module):
             proj = self.head.forward(feat_l)[0]          # (B, D, T_l)
             stride = self.level_strides[l]
             st = view_start.to(roi.dtype)
+            if view_rate is not None:
+                stride = stride * view_rate.to(roi.dtype)
             boxes = torch.stack(
                 [(roi[:, 0] - st) / stride,
                  (roi[:, 1] - st) / stride], dim=1)      # (B, 2)
@@ -426,8 +431,8 @@ class PtTransformerSSL(nn.Module):
         amask = torch.cat(aligned_masks, dim=1).min(dim=1)[0]  # (B, N)
         return feat.transpose(1, 2), (amask > 0.5)
 
-    def forward(self, x, mask, view_start, roi):
-        return self.forward_view(x, mask, view_start, roi)
+    def forward(self, x, mask, view_start, roi, view_rate=None):
+        return self.forward_view(x, mask, view_start, roi, view_rate)
 
 
 ################################################################################

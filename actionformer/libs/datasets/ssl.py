@@ -10,6 +10,7 @@ No action labels / segments are required, so unlabeled videos can be used.
 """
 import os
 import json
+import math
 import random
 
 import numpy as np
@@ -103,6 +104,7 @@ class SelfSupDataset(Dataset):
         min_overlap,       # min overlap (= fraction of the smaller crop)
         min_crop_len,      # min crop length (in feature grid units)
         force_upsampling,  # ignored (kept for interface parity)
+        rate_range=(1.0, 1.0),  # (lo, hi) per-view playback rate (training only)
         **kwargs
     ):
         self.split = split
@@ -123,6 +125,8 @@ class SelfSupDataset(Dataset):
         self.crop_scale = list(crop_scale)
         self.min_overlap = min_overlap
         self.min_crop_len = min_crop_len
+        self.rate_range = [float(r) for r in rate_range]
+        assert 0 < self.rate_range[0] <= self.rate_range[1]
 
         # load the video list
         self.data_list = self._load_json_db(json_file)
@@ -162,6 +166,21 @@ class SelfSupDataset(Dataset):
         assert len(dict_db) > 0, "no videos found for the given split"
         return dict_db
 
+    def sample_rate(self, crop_len):
+        """
+        Log-uniform playback rate for one view (feature-level frame-rate
+        augmentation): the view is resampled to one vector every `rate` raw
+        feature steps, so rate > 1 plays the crop faster (fewer vectors) and
+        rate < 1 slower (interpolated, more vectors). Validation always uses
+        rate 1, so val losses stay comparable across runs.
+        """
+        lo, hi = self.rate_range
+        if not self.is_training or lo == hi == 1.0:
+            return 1.0
+        rate = math.exp(random.uniform(math.log(lo), math.log(hi)))
+        # a slowed-down view must still fit into the model's max_seq_len
+        return max(rate, crop_len / self.max_seq_len)
+
     def __len__(self):
         return len(self.data_list)
 
@@ -195,4 +214,6 @@ class SelfSupDataset(Dataset):
         return {'video_id': video_item['id'],
                 'feats': feats,
                 'feats_lens': T,
-                'crop_box': ((s1, e1), (s2, e2))}
+                'crop_box': ((s1, e1), (s2, e2)),
+                'crop_rate': (self.sample_rate(e1 - s1),
+                              self.sample_rate(e2 - s2))}

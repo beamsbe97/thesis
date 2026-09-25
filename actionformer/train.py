@@ -32,6 +32,8 @@ def main(args):
         cfg = load_config(args.config)
     else:
         raise ValueError("Config file does not exist.")
+    if args.seed is not None:
+        cfg['init_rand_seed'] = args.seed
     pprint(cfg)
 
     # prep for output folder (based on time stamp)
@@ -214,6 +216,9 @@ if __name__ == '__main__':
                         help='print frequency (default: 10 iterations)')
     parser.add_argument('-c', '--ckpt-freq', default=5, type=int,
                         help='checkpoint frequency (default: every 5 epochs)')
+    parser.add_argument('--seed', default=None, type=int,
+                        help='override the config\'s init_rand_seed '
+                             '(for repeated runs; default: use the config)')
     parser.add_argument('--output', default='', type=str,
                         help='name of exp folder (default: none)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',

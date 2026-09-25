@@ -31,7 +31,12 @@ def build_views(video_list, view_idx, div_factor, max_seq_len, device, dtype=Non
     Slice one temporal view per video and pad the batch to a multiple of
     div_factor (required by the multi-scale transformer / local attention).
 
-    Returns (x (B, C, P), mask (B, 1, P) bool, view_start (B,) float).
+    If the video carries a playback rate r for this view ('crop_rate'), the
+    crop [s, e) is resampled by linear interpolation at raw positions
+    s, s + r, s + 2r, ... (r = 1 is an exact slice).
+
+    Returns (x (B, C, P), mask (B, 1, P) bool, view_start (B,) float,
+             view_rate (B,) float).
     """
     B = len(video_list)
     C = video_list[0]['feats'].size(0)
@@ -40,10 +45,14 @@ def build_views(video_list, view_idx, div_factor, max_seq_len, device, dtype=Non
 
     starts = []
     lens = []
+    rates = []
     for v in video_list:
         s, e = v['crop_box'][view_idx]
+        r = float(v.get('crop_rate', (1.0, 1.0))[view_idx])
         starts.append(int(s))
-        lens.append(int(e - s))
+        rates.append(r)
+        # number of samples s + j*r that stay inside [s, e - 1]
+        lens.append(int((e - s - 1) // r) + 1 if e > s else 0)
 
     P = max(lens)
     P = min(max_seq_len, ((P + div_factor - 1) // div_factor) * div_factor)
@@ -56,11 +65,21 @@ def build_views(video_list, view_idx, div_factor, max_seq_len, device, dtype=Non
         if L <= 0:
             continue
         s, e = v['crop_box'][view_idx]
-        x[i, :, :L].copy_(v['feats'][:, s:e].to(device).to(dtype))
+        r = rates[i]
+        if r == 1.0:
+            view = v['feats'][:, s:e]
+        else:
+            pos = s + torch.arange(L, dtype=torch.float64) * r
+            lo = pos.floor().long().clamp(max=e - 1)
+            hi = (lo + 1).clamp(max=e - 1)
+            w = (pos - lo.to(pos.dtype)).to(v['feats'].dtype)
+            view = v['feats'][:, lo] * (1.0 - w) + v['feats'][:, hi] * w
+        x[i, :, :L].copy_(view.to(device).to(dtype))
         mask[i, 0, :L] = True
 
     view_start = torch.tensor(starts, dtype=torch.float32, device=device)
-    return x, mask, view_start
+    view_rate = torch.tensor(rates, dtype=torch.float32, device=device)
+    return x, mask, view_start, view_rate
 
 
 def build_roi(video_list, device, dtype=torch.float32):
@@ -114,13 +133,13 @@ def train_one_epoch_ssl(
         optimizer.zero_grad(set_to_none=True)
 
         # view 1 -> student, view 2 -> EMA teacher
-        x1, m1, st1 = build_views(video_list, 0, div_factor, max_seq_len, master_device)
-        x2, m2, st2 = build_views(video_list, 1, div_factor, max_seq_len, master_device)
+        x1, m1, st1, r1 = build_views(video_list, 0, div_factor, max_seq_len, master_device)
+        x2, m2, st2, r2 = build_views(video_list, 1, div_factor, max_seq_len, master_device)
         roi = build_roi(video_list, master_device)
 
-        f_s, amask_s = model(x1, m1, st1, roi)
+        f_s, amask_s = model(x1, m1, st1, roi, r1)
         with torch.no_grad():
-            f_t, amask_t = teacher.module(x2, m2, st2, roi)
+            f_t, amask_t = teacher.module(x2, m2, st2, roi, r2)
 
         losses = loss_fn(f_s, f_t, amask_s & amask_t)
         losses['final_loss'].backward()
@@ -186,11 +205,11 @@ def validate_ssl(
     cnt = 0
     with torch.no_grad():
         for video_list in val_loader:
-            x1, m1, st1 = build_views(video_list, 0, div_factor, max_seq_len, master_device)
-            x2, m2, st2 = build_views(video_list, 1, div_factor, max_seq_len, master_device)
+            x1, m1, st1, r1 = build_views(video_list, 0, div_factor, max_seq_len, master_device)
+            x2, m2, st2, r2 = build_views(video_list, 1, div_factor, max_seq_len, master_device)
             roi = build_roi(video_list, master_device)
-            f_s, amask_s = model.module(x1, m1, st1, roi)
-            f_t, amask_t = teacher.module(x2, m2, st2, roi)
+            f_s, amask_s = model.module(x1, m1, st1, roi, r1)
+            f_t, amask_t = teacher.module(x2, m2, st2, roi, r2)
             losses = loss_fn(f_s, f_t, amask_s & amask_t)
             for key, value in losses.items():
                 if key not in losses_tracker:
@@ -254,6 +273,8 @@ def main(args):
         cfg = load_config(args.config)
     else:
         raise ValueError("Config file does not exist.")
+    if args.seed is not None:
+        cfg['init_rand_seed'] = args.seed
     pprint(cfg)
 
     # self-supervised method (flag overrides config)
@@ -291,6 +312,7 @@ def main(args):
     dataset_kwargs['crop_scale'] = ssl_cfg.get('crop_scale', [0.4, 1.0])
     dataset_kwargs['min_overlap'] = ssl_cfg.get('min_overlap', 0.2)
     dataset_kwargs['min_crop_len'] = ssl_cfg.get('min_crop_len', 128)
+    dataset_kwargs['rate_range'] = ssl_cfg.get('rate_range', [1.0, 1.0])
 
     train_dataset = make_dataset(
         cfg['dataset_name'], True, cfg['train_split'], **dataset_kwargs)
@@ -450,6 +472,9 @@ if __name__ == '__main__':
                         help='validate every N epochs (default: 1)')
     parser.add_argument('--output', default='', type=str,
                         help='name of exp folder (default: none)')
+    parser.add_argument('--seed', default=None, type=int,
+                        help='override the config\'s init_rand_seed '
+                             '(for repeated runs; default: use the config)')
     parser.add_argument('--ckpt-dir', default='ckpt', type=str,
                         help='root ckpt folder for auto-discovery '
                              'of supervised checkpoints (default: ckpt)')
