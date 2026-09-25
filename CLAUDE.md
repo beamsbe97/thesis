@@ -136,6 +136,15 @@ EPIC-100 verb, validation split, mAP @ tIoU (avg of 0.1–0.5):
 | Control: baseline + same joint fine-tune, no SSL (final ep.) | 26.41 | 25.16 | 23.55 | 21.52 | 18.22 | **22.97** |
 | SSL *pre*-train → supervised, V-JEPA2 (pipeline 3) | 20.33 | 19.49 | 18.11 | 15.87 | 13.19 | **17.40** |
 | Supervised baseline (VideoMAE-L, EPIC-finetuned, OpenTAD feats) | 32.84 | 32.06 | 30.42 | 28.11 | 24.59 | **29.60** |
+| VideoMAE-L + SSL post-training, frozen heads (pipeline 2) | 32.65 | 31.80 | 29.96 | 27.83 | 23.97 | **29.24** |
+| VideoMAE-L SSL pre-train → supervised (pipeline 3) | 32.83 | 32.23 | 30.58 | 27.84 | 23.46 | **29.38** |
+| SlowFast pipeline 3 + frame-rate augmentation in SSL (1 seed) | 27.92 | 26.68 | 25.15 | 22.79 | 19.70 | **24.45** |
+
+**Seed replicates (SlowFast, n=3 each):** baseline 23.07 / 22.84 / 24.23 =
+**23.38 ± 0.75**; pipeline 3 23.56 / 23.67 / 23.72 = **23.65 ± 0.08**. Difference
++0.27, Welch t ≈ 0.6 -> not significant. The single-seed "+0.49, beats the paper"
+claim was baseline seed noise; the paper's 23.5 is inside the baseline range.
+Pipeline 3's much lower spread is the real (tentative, n=3) signal.
 
 SSL training signals:
 
@@ -204,6 +213,12 @@ variant (it would converge toward pipeline 3's protocol).
 
 ## Current status
 
+- 2026-09-25 (afternoon): all 12 jobs of the seed / rate-aug / VideoMAE-SSL batch
+  done (5094852–5094863), results above and in root `report.md` §3.5, §5.2, §5.5.
+  Headline: post-training hurts on both SlowFast and VideoMAE-L; pretraining
+  gives no mean gain on any track but stabilizes SlowFast across seeds; rate
+  augmentation (`ssl.rate_range: [0.5, 2.0]`) gave 24.45 on one seed.
+
 - 2026-09-25: **V-JEPA2 pipeline 3 done: no gain** (17.40 vs 17.49 baseline;
   job 5093405, `ckpt/epic_vjepa2_verb_from_ssl_neco/`). The SlowFast pipeline-3
   gain (+0.49) does not replicate on this track -> treat it as tentative.
@@ -237,15 +252,15 @@ variant (it would converge toward pipeline 3's protocol).
    **not** recover the loss (see "Joint fine-tune ablation"). `report.md`
    §5.1 still presents head mismatch as the load-bearing explanation and
    needs revising.
-2. Open thread from `current_lit.md`: only one SSL protocol variant
-   (temporal crop augmentation) has been tried; alternative augmentation
-   styles (frame-rate variation, combined spatial+temporal crops) are noted
-   but not yet run.
+2. Augmentation styles from `current_lit.md`: **feature-level frame-rate
+   variation done** (combined with the existing temporal crops; 24.45, 1 seed —
+   see item 7). Spatial crops aren't possible on pooled clip features (would
+   need re-extraction).
 3. ~~V-JEPA2 through pipeline 3~~ — done 2026-09-25, no gain (17.40 vs 17.49).
-4. **Seeds**: SlowFast baseline vs. pipeline 3 differ by +0.49 on one seed and
-   the effect didn't replicate on V-JEPA2 — rerun both with 2–3 seeds.
-5. **VideoMAE-L through pipelines 2/3** (SSL on the strongest track, 29.60
-   baseline). `ssl.py` already reads `.npy`; needs an `ssl_epic_videomae_verb.yaml`
-   (note 2× density: `min_crop_len` / `max_seq_len` in feature units).
+4. ~~Seeds~~ — done: +0.27 over 3 seeds, not significant (see Results).
+5. ~~VideoMAE-L through pipelines 2/3~~ — done: 29.24 / 29.38 vs 29.60.
+7. **Replicate the frame-rate augmentation result** (24.45, 1 seed): 2 more seeds
+   via `train_ssl_rate.slurm` + `--seed` (script needs a SEED variant), then try it
+   on VideoMAE-L.
 6. OpenTAD's ActionFormer-SlowFast verb number is 24.93, above our 23.07
    repro — worth checking against their SlowFast features.

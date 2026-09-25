@@ -123,3 +123,13 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - launched V-JEPA2 through pipeline 3 (SSL from random init -> supervised)
 - found pre-extracted EPIC-finetuned VideoMAE-L features (OpenTAD), verb + noun sets, 1024-d, stride 8
     - OpenTAD's ActionFormer SlowFast verb = 24.93 avg mAP (> our 23.07)
+
+# 25/9
+- seeds (SlowFast, n=3): baseline 23.38 +- 0.75 (22.84-24.23), pipeline 3 23.65 +- 0.08
+    - +0.27, not significant -> the +0.49 "beats paper" was baseline seed noise
+    - but pipeline 3 is MUCH more stable across seeds (range 0.16 vs 1.39)
+- VideoMAE-L (OpenTAD, EPIC-ft): baseline 29.60, post-train 29.24, pretrain 29.38
+    - post-training hurts on both tracks now; pretraining no gain
+- frame-rate aug (feature-level, per-view rate log-U[0.5,2]) + pipeline 3: 24.45 (1 seed!)
+    - +0.8 over pipeline 3 without it; first SSL variant above the baseline distribution
+    - next: replicate with seeds, then try on VideoMAE

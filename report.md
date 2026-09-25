@@ -1,6 +1,6 @@
 # Self-Supervised Pre/Post-Training for Temporal Action Localization with ActionFormer
 
-*Last updated: 2026-09-25 (V-JEPA2 pipeline 3 and VideoMAE-L baseline added). Paths below are relative to `actionformer/`.*
+*Last updated: 2026-09-25 (seed replicates, frame-rate augmentation, VideoMAE-L SSL runs added). Paths below are relative to `actionformer/`.*
 
 ## 1. Overview
 
@@ -19,19 +19,28 @@ to test *why* post-training hurts.
 
 **Summary of findings.**
 
-| Protocol | Avg mAP (SlowFast) | vs. baseline 23.07 |
-|---|---|---|
-| SSL post-training, frozen heads (pipeline 2) | 22.55 | −0.52 |
-| ... + joint encoder/head fine-tune (ablation) | 22.45 | −0.62 (control: 22.97) |
-| SSL pretraining → supervised training (pipeline 3) | **23.56** | **+0.49** (paper: 23.5) |
+| Protocol | SlowFast | VideoMAE-L | V-JEPA2 |
+|---|---|---|---|
+| Supervised baseline | 23.38 ± 0.75 (n=3) | 29.60 | 17.49 |
+| SSL post-training, frozen heads (pipeline 2) | 22.55 | 29.24 | -- |
+| ... + joint encoder/head fine-tune (ablation) | 22.45 (control: 22.97) | -- | -- |
+| SSL pretraining → supervised (pipeline 3) | 23.65 ± 0.08 (n=3) | 29.38 | 17.40 |
+| ... + frame-rate augmentation in SSL | **24.45** (n=1) | -- | -- |
 
-On SlowFast, SSL helps **only as an initialization** followed by a full supervised
-schedule. Applied after supervised convergence it degrades the encoder, and --
-contrary to the original hypothesis -- letting the heads re-adapt does not recover
-the loss. The pipeline-3 gain does **not** replicate on V-JEPA2 features (17.40 vs
-17.49 baseline), so it should be treated as tentative until repeated over seeds.
-EPIC-finetuned VideoMAE-L features give a much stronger supervised baseline
-(29.60).
+(Avg mAP, EPIC-100 verb validation; mean ± sample sd over seeds where n > 1.)
+
+1. **SSL post-training hurts**, on both feature tracks tested (SlowFast −0.52,
+   VideoMAE-L −0.36), and re-training the heads jointly does not recover it: the
+   damage is in the encoder.
+2. **SSL pretraining does not raise mean mAP.** The single-seed +0.49 pp on SlowFast
+   reported earlier shrinks to +0.27 pp over three seeds each, well inside seed
+   noise (baseline sd 0.75), and there is no gain on V-JEPA2 or VideoMAE-L.
+   It does make SlowFast training markedly **more stable across seeds**
+   (sd 0.08 vs 0.75).
+3. **Frame-rate augmentation in the SSL stage** gives the best SlowFast result so far
+   (24.45, +0.80 over pipeline 3 without it), but on a single seed.
+4. **Features dominate**: EPIC-finetuned VideoMAE-L features are +6.2 pp over
+   SlowFast -- an order of magnitude more than any SSL effect.
 
 Experiments were run on the ALICE cluster (Leiden University). The project mirrors the
 official ActionFormer codebase with an added self-supervised training stage.
@@ -95,7 +104,7 @@ the SSL checkpoint, 22 head keys from the supervised checkpoint).
    the **entire model** with the unmodified supervised recipe (§2.2). The only
    difference from the baseline is the encoder's starting point.
 
-Run for SlowFast and, as a second track, for V-JEPA2.
+Run for SlowFast (3 seeds, §2.8), V-JEPA2 and VideoMAE-L.
 
 ### 2.6 Joint fine-tune ablation on pipeline 2
 
@@ -111,6 +120,33 @@ A **control** runs the identical schedule from the unmodified supervised baselin
 (no SSL), so the effect of extra supervised epochs is separated from the effect of
 the SSL encoder.
 
+### 2.7 Feature-level frame-rate augmentation
+
+A variant of the SSL view sampling (§2.3) that also changes the *playback rate* of
+each view. After the two temporal crops are sampled, each training view gets an
+independent rate r ~ log-uniform[0.5, 2]. The crop [s, e) is resampled by linear
+interpolation at raw feature positions s, s + r, s + 2r, ...: r > 1 plays it faster
+(fewer vectors), r < 1 slower (more, interpolated vectors). The shared ROI is mapped
+into each view with the view's stride × r, so both views are still aligned on the
+same raw moments and the NeCo target is unchanged; the model must now match
+neighbourhoods across different apparent action durations. Validation views always
+use r = 1, so validation losses stay comparable with the other runs.
+
+This operates on the pre-extracted feature sequence -- no re-extraction. Each SlowFast
+vector still encodes ~1 s of normal-speed motion, so this is sequence-rate
+(action-duration) augmentation rather than true motion-speed augmentation.
+Implementation: `ssl.rate_range` in the SSL config (`[1, 1]`, the default, is
+bit-identical to the original code); geometry test in
+`tools/test_rate_augmentation.py`. Run through pipeline 3 on SlowFast
+(`configs/ssl_epic_slowfast_verb_rate.yaml`).
+
+### 2.8 Seed replicates
+
+The SlowFast baseline and SlowFast pipeline 3 were repeated with two additional seeds
+(`--seed 1`, `--seed 2`, overriding the config's `init_rand_seed`; the original runs
+use the default seed). For pipeline 3 **both** stages are re-seeded, so the spread
+includes SSL-stage variance as well as supervised-stage variance.
+
 ## 3. Results
 
 ### 3.1 Main results (EPIC-100 verb, validation)
@@ -124,7 +160,13 @@ the SSL encoder.
 | SSL pretrain → supervised (SlowFast, pipeline 3) | 26.72 | 25.63 | 24.10 | 22.37 | 18.99 | **23.56** |
 | Supervised baseline (V-JEPA2) | 20.51 | 19.74 | 18.38 | 16.17 | 12.64 | **17.49** |
 | SSL pretrain → supervised (V-JEPA2, pipeline 3) | 20.33 | 19.49 | 18.11 | 15.87 | 13.19 | **17.40** |
+| SSL pretrain → supervised, rate-augmented SSL (SlowFast, §2.7) | 27.92 | 26.68 | 25.15 | 22.79 | 19.70 | **24.45** |
 | Supervised baseline (VideoMAE-L, EPIC-finetuned) | 32.84 | 32.06 | 30.42 | 28.11 | 24.59 | **29.60** |
+| + SSL post-training, frozen heads (VideoMAE-L, pipeline 2) | 32.65 | 31.80 | 29.96 | 27.83 | 23.97 | **29.24** |
+| SSL pretrain → supervised (VideoMAE-L, pipeline 3) | 32.83 | 32.23 | 30.58 | 27.84 | 23.46 | **29.38** |
+
+SlowFast rows without a seed are the default-seed runs; see §3.5 for the seed
+replicates.
 
 ### 3.2 Joint fine-tune ablation, per epoch
 
@@ -157,11 +199,18 @@ the end.
 | SlowFast, pretraining (pipeline 3, stage A) | random | 2.20 | 0.769 |
 | V-JEPA2, post-training | supervised epoch_021 | 5.95 | 0.835 |
 | V-JEPA2, pretraining (pipeline 3, stage A) | random | 1.77 | 0.839 |
+| SlowFast, pretraining, seed 1 | random | 2.16 | 0.786 |
+| SlowFast, pretraining, seed 2 | random | 2.21 | 0.780 |
+| SlowFast, pretraining + rate augmentation | random | 2.29 | 0.769 |
+| VideoMAE-L, post-training (pipeline 2) | supervised epoch_021 | 5.16 | 0.849 |
+| VideoMAE-L, pretraining (pipeline 3, stage A) | random | 2.41 | 0.849 |
 
 NeCo losses are not comparable *across* encoder inits: a supervised encoder starts
 with a very different feature geometry (the warm SlowFast run starts at ~17 and ends
 at 5.6), so a lower loss for the random-init runs does not mean a better
-representation.
+representation. Within an init they are consistent: the three random-init SlowFast
+seeds end at 2.16–2.21, and the rate-augmented run (validated at rate 1) at 2.29 --
+the harder training views barely change how well the objective fits.
 
 ### 3.4 Training-loss curves
 
@@ -176,8 +225,25 @@ representation.
 
 The two supervised loss curves are effectively indistinguishable: same starting value,
 same noisy trajectory, same final training loss (~0.35). SSL pretraining does **not**
-show up as a lower starting loss or faster convergence; its benefit appears only in
-validation mAP (§5.2).
+show up as a lower starting loss or faster convergence; whatever it changes shows up
+only in validation mAP and its seed-to-seed spread (§5.2).
+
+### 3.5 Seed replicates (SlowFast)
+
+| Run | tIoU 0.1 | tIoU 0.2 | tIoU 0.3 | tIoU 0.4 | tIoU 0.5 | Avg mAP |
+|---|---|---|---|---|---|---|
+| Baseline, default seed | 26.40 | 25.15 | 23.73 | 21.70 | 18.35 | 23.07 |
+| Baseline, seed 1 | 26.15 | 25.01 | 23.66 | 21.32 | 18.06 | 22.84 |
+| Baseline, seed 2 | 27.45 | 26.36 | 25.09 | 22.91 | 19.32 | 24.23 |
+| **Baseline, mean ± sd** | | | | | | **23.38 ± 0.75** |
+| Pipeline 3, default seed | 26.72 | 25.63 | 24.10 | 22.37 | 18.99 | 23.56 |
+| Pipeline 3, seed 1 | 26.85 | 25.81 | 24.51 | 22.09 | 19.11 | 23.67 |
+| Pipeline 3, seed 2 | 26.86 | 25.99 | 24.73 | 22.56 | 18.48 | 23.72 |
+| **Pipeline 3, mean ± sd** | | | | | | **23.65 ± 0.08** |
+
+Difference of means: **+0.27 pp** (Welch t ≈ 0.6, n = 3 each; not significant).
+Seed-to-seed spread of the baseline (range 1.39 pp) is ~3× the originally reported
+single-seed gain, while the three pipeline-3 runs lie within 0.16 pp of each other.
 
 ## 4. Comparison with ActionFormer (paper, Table 2)
 
@@ -202,8 +268,10 @@ features):
 Notes on comparability:
 
 - The reproduced baseline (23.07) is 0.43 pp below the paper (23.5), with closely
-  matching per-threshold trends -- a typical reproduction gap (feature-extraction
-  version, schedule, evaluation details).
+  matching per-threshold trends. With seed replicates the baseline is
+  23.38 ± 0.75 (range 22.84–24.23), which **contains the paper's 23.5**: the
+  "reproduction gap" is within seed noise, and "pipeline 3 beats the paper" (+0.06)
+  is not a meaningful claim.
 - The OpenTAD reimplementation reports **24.93** avg mAP for ActionFormer on
   EPIC-100 verb with their own EPIC-finetuned SlowFast features, above both the
   paper and our reproduction. Absolute numbers are therefore sensitive to the exact
@@ -236,16 +304,26 @@ Candidate explanations considered originally:
 Explanation 2 was initially considered the load-bearing one. §5.3 tests it and
 **rules it out** as the main cause.
 
-### 5.2 SSL pretraining followed by supervised training *does* improve TAL performance
+### 5.2 SSL pretraining followed by supervised training: more stable, not better on average
 
-Pipeline 3 reaches **23.56 avg mAP: +0.49 pp over the baseline and +0.06 pp over the
-paper**, ahead at every tIoU threshold, including 0.4/0.5 where post-training lost
-the most.
+With a single seed, pipeline 3 appeared to give **+0.49 pp** on SlowFast (23.56 vs
+23.07), ahead at every tIoU threshold. The seed replicates (§3.5) change this:
 
-This does not show up in the supervised *training* loss (§3.4), which is
-indistinguishable from the baseline's. The gain is a generalization effect -- higher
-validation mAP at the same training loss -- consistent with SSL pretraining acting as
-a representation prior / regularizer rather than an optimization head start.
+- **Mean effect is within noise.** 23.65 ± 0.08 vs 23.38 ± 0.75, a +0.27 pp
+  difference with t ≈ 0.6. The original baseline run happened to be on the low side
+  of its own distribution.
+- **Variance drops sharply.** The three SSL-initialized runs span 0.16 pp; the three
+  baselines span 1.39 pp. Every SSL-initialized run is above the baseline *median*
+  (23.07), but one baseline seed (24.23) beats all of them. With n = 3 per arm, the
+  variance difference is suggestive rather than established, but it is the most
+  consistent signal in the pipeline-3 data.
+- **No gain on the other tracks.** V-JEPA2: 17.40 vs 17.49. VideoMAE-L: 29.38 vs
+  29.60 (single seeds; both within the noise level measured on SlowFast).
+
+The supervised *training* loss (§3.4) is indistinguishable between SSL-initialized
+and random-init runs, consistent with SSL init affecting which solution training
+settles in (a representation prior / stabilizer) rather than how fast the loss is
+fit.
 
 ### 5.3 Joint fine-tune ablation: head mismatch is not the explanation
 
@@ -263,10 +341,12 @@ So the damage from SSL post-training lives in the **encoder itself**: within thi
 fine-tune budget, supervised gradients do not move it back to an equally good
 solution. This leaves explanations 1 and 4 of §5.1.
 
-It also changes how pipeline 3's gain should be read. It is not "the heads were
-allowed to adapt" -- the ablation shows that alone is not enough. It is that SSL is
-used as an **initialization**, followed by a *full* supervised schedule (warm-up at
-the base learning rate) that can reshape the whole encoder around the task.
+It also changes how pipeline 3 should be read: the difference between the protocols
+is not "the heads were allowed to adapt" -- the ablation shows that alone is not
+enough. It is that SSL is used as an **initialization**, followed by a *full*
+supervised schedule (warm-up at the base learning rate) that can reshape the whole
+encoder around the task. That is enough to avoid the post-training damage, but, per
+§5.2, not enough to produce a reliable mean gain.
 
 **Caveat.** The fine-tune was deliberately short and low-learning-rate (6 epochs at
 lr 2e-5). A full-length, base-learning-rate schedule starting from the post-trained
@@ -289,35 +369,55 @@ initialization.
   threshold where the SSL-initialized model is ahead is tIoU 0.5 (13.19 vs 12.64);
   the rest are 0.2–0.3 pp lower. The SSL stage itself converged normally (final val
   NeCo loss 1.77, agreement 0.839, §3.3).
+- **VideoMAE-L through both SSL protocols** reproduces the SlowFast pattern on a much
+  stronger baseline:
+  - post-training (pipeline 2) **hurts**: 29.24 vs 29.60 (−0.36), lower at every
+    tIoU threshold, as on SlowFast (−0.52);
+  - pretraining (pipeline 3) gives **no gain**: 29.38 vs 29.60 (−0.22; ahead at
+    tIoU 0.2/0.3, behind at 0.4/0.5).
 
-### 5.5 Conclusions
+### 5.5 Frame-rate augmentation
 
-The effect of SSL depends on the protocol:
+Adding the per-view rate augmentation (§2.7) to pipeline 3 gives **24.45 avg mAP** on
+SlowFast -- the best SlowFast result in this report, and ahead of pipeline 3 without
+it at every tIoU threshold (27.92 / 26.68 / 25.15 / 22.79 / 19.70 vs the 3-seed means
+26.81 / 25.81 / 24.45 / 22.34 / 18.86).
 
-- **SSL post-training on a converged model does not help** (22.55 vs 23.07), and
-  **jointly re-training the heads does not rescue it** (22.45 vs a 22.97 control).
-  The post-trained encoder is itself worse for localization.
-- **SSL pretraining on an untrained encoder, followed by ordinary supervised
-  training, helps on SlowFast** (23.56 vs 23.07, +0.49 pp), matching and marginally
-  beating the paper's number at every tIoU threshold, with no change to the
-  supervised recipe beyond the encoder's starting point.
-- **The same protocol gives no gain on V-JEPA2** (17.40 vs 17.49). The pipeline-3
-  effect therefore does not generalize across feature tracks, and on SlowFast it is
-  a single-seed +0.49 pp result -- it should be treated as tentative.
+- vs. pipeline 3 without rate augmentation: **+0.80** over its 3-seed mean. Given
+  that pipeline 3's seeds span only 0.16 pp, this is well outside its observed spread.
+- vs. the baseline: +1.07 over its mean, and above its best seed (24.23).
+- The SSL objective itself is fit about as well as without the augmentation (val
+  NeCo loss 2.29 vs 2.16–2.21, measured at rate 1), so the difference comes from
+  *what* is learned, not how well the objective converges.
 
-In every run the SSL objective learns (loss falls, agreement rises). The robust
-finding is the negative one: applied after supervised convergence, it moves a
-task-tuned encoder away from what the task needs, and a short supervised fine-tune
-does not undo that. Used as an initialization it is at worst harmless (V-JEPA2) and
-at best a modest gain (SlowFast).
+This is a **single seed**, and it is the first result in this study where an SSL
+variant plausibly beats the baseline distribution rather than a single baseline
+run. It is the obvious candidate for seed replication, and for testing on VideoMAE-L.
 
-**Limitations.** All results are single runs with one seed. The differences under
-discussion are ~0.5 pp, and the one positive SSL result did not replicate on the
-second feature track. Epoch-to-epoch variation of a converged model is ~±0.05 pp
-(§3.2), but seed-to-seed variance has not been measured. Repeating the baseline and
-pipeline 3 with 2–3 seeds would be needed before calling the +0.49 pp gain
-significant. The natural next test bed is the VideoMAE-L track, where the
-baseline is strongest.
+
+### 5.6 Conclusions
+
+- **SSL post-training on a converged model hurts** on both SlowFast (−0.52) and
+  VideoMAE-L (−0.36), and **jointly re-training the heads does not rescue it**
+  (22.45 vs a 22.97 control). The post-trained encoder is itself worse for
+  localization. This is the most robust finding of the study: it holds across
+  feature tracks and has a clean control.
+- **SSL pretraining with the original temporal-crop views does not improve mean
+  mAP** on any feature track (SlowFast +0.27 over 3 seeds, within noise; V-JEPA2
+  −0.09; VideoMAE-L −0.22). The earlier single-seed "+0.49 pp, beats the paper"
+  result was seed noise in the baseline. On SlowFast it does make training much more
+  stable across seeds (sd 0.08 vs 0.75).
+- **Frame-rate augmentation changes the picture**, at least on one seed: 24.45 on
+  SlowFast, +0.8 above pipeline 3 without it. Whether SSL pretraining helps may
+  depend on *which invariance* the views teach -- matching crops of the same speed
+  gives no mean gain; matching across playback rates might.
+- **Feature quality dominates**: VideoMAE-L features give +6.2 pp over SlowFast,
+  an order of magnitude more than any SSL effect.
+
+**Limitations.** Seed replicates exist only for the SlowFast baseline and pipeline 3
+(n = 3 each); every other row, including the rate-augmented result, is a single
+seed. The SlowFast baseline's seed spread (sd 0.75) means single-seed differences
+below ~1.5 pp should not be interpreted.
 
 ## 6. Reproducibility Notes
 
@@ -347,5 +447,20 @@ baseline is strongest.
   `train_verb_videomae.slurm` (job 5093406, 1h16) →
   `ckpt/epic_videomae_verb_reproduce/epoch_021.pth.tar`. A first attempt (job
   5093366) was likewise cancelled at epoch 5 and rerun.
+- **Seed replicates** (`--seed 1`, `--seed 2`): baselines `train_verb_seed.slurm`
+  (jobs 5094858, 5094861) → `ckpt/epic_slowfast_verb_reproduce_seed{1,2}/`;
+  pipeline 3 stage A `train_ssl_seed.slurm` (5094859, 5094862) →
+  `ckpt_ssl/ssl_epic_slowfast_verb_neco_seed{1,2}/`, stage B
+  `train_verb_from_ssl_seed.slurm` (5094860, 5094863) →
+  `ckpt/epic_slowfast_verb_from_ssl_neco_seed{1,2}/`. Submit with
+  `sbatch --export=ALL,SEED=<n> <script>`.
+- **Frame-rate augmentation**: stage A `train_ssl_rate.slurm` (job 5094852) →
+  `ckpt_ssl/ssl_epic_slowfast_verb_rate_neco/`; stage B `train_verb_from_ssl_rate.slurm`
+  (5094853, 1h06) → `ckpt/epic_slowfast_verb_from_ssl_neco_rate/epoch_021.pth.tar`.
+- **VideoMAE-L SSL**: pipeline 3 `train_ssl_videomae_cold.slurm` (5094854) →
+  `train_verb_videomae_from_ssl.slurm` (5094855, 1h16) →
+  `ckpt/epic_videomae_verb_from_ssl_neco/`; pipeline 2 `train_ssl_videomae_warm.slurm`
+  (5094856) → `eval_ssl_videomae_warm.slurm` (5094857; 207 encoder + 22 head keys).
+- All encoder inits verified at load: 207 encoder keys matched, 0 unexpected.
 - **Figures**: `figs/ssl_pretrain_loss.{png,jpg}`,
   `figs/supervised_loss_comparison.{png,jpg}`, produced by `tools/plot_loss_curves.py`.
