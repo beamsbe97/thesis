@@ -27,7 +27,7 @@ bundle` and pushed from there (Alice's SSH key is the one with write access).
 
 ## Data & features
 
-- **Dataset**: EPIC-KITCHENS-100, verb-only track. 272 training videos, 138
+- **Dataset**: EPIC-KITCHENS-100, verb-only track. 495 training videos, 138
   validation videos.
 - **SlowFast features** (primary track): 2304-dim, EPIC-pretrained, 32-frame
   window / 16-frame stride, 30fps clips → ~1.875 vectors/sec.
@@ -134,6 +134,8 @@ EPIC-100 verb, validation split, mAP @ tIoU (avg of 0.1–0.5):
 | SSL *pre*-train → supervised (pipeline 3) | 26.72 | 25.63 | 24.10 | 22.37 | 18.99 | **23.56** |
 | Pipeline 2 + joint fine-tune, heads unfrozen (ablation, final ep.) | 26.15 | 24.78 | 23.14 | 21.21 | 17.83 | **22.45** |
 | Control: baseline + same joint fine-tune, no SSL (final ep.) | 26.41 | 25.16 | 23.55 | 21.52 | 18.22 | **22.97** |
+| SSL *pre*-train → supervised, V-JEPA2 (pipeline 3) | 20.33 | 19.49 | 18.11 | 15.87 | 13.19 | **17.40** |
+| Supervised baseline (VideoMAE-L, EPIC-finetuned, OpenTAD feats) | 32.84 | 32.06 | 30.42 | 28.11 | 24.59 | **29.60** |
 
 SSL training signals:
 
@@ -142,6 +144,7 @@ SSL training signals:
 | SSL post-train (pipeline 2) | supervised epoch_021 | 5.59 | 0.832 |
 | SSL pre-train (pipeline 3, stage A) | random | 2.20 | 0.769 |
 | SSL post-train, V-JEPA2 | supervised epoch_021 | 5.95 | 0.835 |
+| SSL pre-train, V-JEPA2 (pipeline 3, stage A) | random | 1.77 | 0.839 |
 
 Reproduction gap vs. the paper is small and expected (−0.43pp): matches the
 paper's per-threshold trend closely; attributed to feature-extraction
@@ -201,6 +204,20 @@ variant (it would converge toward pipeline 3's protocol).
 
 ## Current status
 
+- 2026-09-25: **V-JEPA2 pipeline 3 done: no gain** (17.40 vs 17.49 baseline;
+  job 5093405, `ckpt/epic_vjepa2_verb_from_ssl_neco/`). The SlowFast pipeline-3
+  gain (+0.49) does not replicate on this track -> treat it as tentative.
+- 2026-09-25: **VideoMAE-L track added**: OpenTAD's EPIC-finetuned VideoMAE-L
+  verb features (1024-d, stride 8, `.npy`) in
+  `data/epic_kitchens/features_videomae_verb/`, config
+  `configs/epic_videomae_verb.yaml`. Supervised baseline **29.60** (job 5093406),
+  +6.5 pp over SlowFast.
+- Jobs 5093341 / 5093366 were cancelled by mistake (buffered `.out` logs misread
+  as a hang) and rerun as 5093405 / 5093406; partial outputs in
+  `ckpt/_cancelled/`. Newer slurm scripts use `python -u`.
+- Root `report.md` is the up-to-date write-up; `actionformer/report.md` is stale
+  (pipeline 3 SlowFast only).
+
 - 2026-09-24: joint fine-tune ablation (jobs 5093320/5093321) done, see
   above. V-JEPA2 pipeline 3 submitted: stage A `train_ssl_vjepa2_cold.slurm`
   → stage B `train_verb_vjepa2_from_ssl.slurm` (chained, `afterok`).
@@ -224,9 +241,11 @@ variant (it would converge toward pipeline 3's protocol).
    (temporal crop augmentation) has been tried; alternative augmentation
    styles (frame-rate variation, combined spatial+temporal crops) are noted
    but not yet run.
-3. V-JEPA2 through pipeline 3 — **submitted 2026-09-24**, compare against
-   the 17.49 V-JEPA2 supervised baseline.
-4. Pre-extracted EPIC-finetuned VideoMAE-L verb features exist (OpenTAD,
-   1024-d, 16-frame / stride 8 → 2× SlowFast density); OpenTAD's own
-   ActionFormer-SlowFast verb number is 24.93, above our 23.07 repro —
-   worth checking against their SlowFast features.
+3. ~~V-JEPA2 through pipeline 3~~ — done 2026-09-25, no gain (17.40 vs 17.49).
+4. **Seeds**: SlowFast baseline vs. pipeline 3 differ by +0.49 on one seed and
+   the effect didn't replicate on V-JEPA2 — rerun both with 2–3 seeds.
+5. **VideoMAE-L through pipelines 2/3** (SSL on the strongest track, 29.60
+   baseline). `ssl.py` already reads `.npy`; needs an `ssl_epic_videomae_verb.yaml`
+   (note 2× density: `min_crop_len` / `max_seq_len` in feature units).
+6. OpenTAD's ActionFormer-SlowFast verb number is 24.93, above our 23.07
+   repro — worth checking against their SlowFast features.

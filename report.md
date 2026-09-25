@@ -1,6 +1,6 @@
 # Self-Supervised Pre/Post-Training for Temporal Action Localization with ActionFormer
 
-*Last updated: 2026-09-25. Paths below are relative to `actionformer/`.*
+*Last updated: 2026-09-25 (V-JEPA2 pipeline 3 and VideoMAE-L baseline added). Paths below are relative to `actionformer/`.*
 
 ## 1. Overview
 
@@ -25,9 +25,13 @@ to test *why* post-training hurts.
 | ... + joint encoder/head fine-tune (ablation) | 22.45 | −0.62 (control: 22.97) |
 | SSL pretraining → supervised training (pipeline 3) | **23.56** | **+0.49** (paper: 23.5) |
 
-SSL helps **only as an initialization** followed by a full supervised schedule.
-Applied after supervised convergence it degrades the encoder, and -- contrary to the
-original hypothesis -- letting the heads re-adapt does not recover the loss.
+On SlowFast, SSL helps **only as an initialization** followed by a full supervised
+schedule. Applied after supervised convergence it degrades the encoder, and --
+contrary to the original hypothesis -- letting the heads re-adapt does not recover
+the loss. The pipeline-3 gain does **not** replicate on V-JEPA2 features (17.40 vs
+17.49 baseline), so it should be treated as tentative until repeated over seeds.
+EPIC-finetuned VideoMAE-L features give a much stronger supervised baseline
+(29.60).
 
 Experiments were run on the ALICE cluster (Leiden University). The project mirrors the
 official ActionFormer codebase with an added self-supervised training stage.
@@ -37,13 +41,18 @@ official ActionFormer codebase with an added self-supervised training stage.
 ### 2.1 Task, data and features
 
 - **Dataset**: EPIC-KITCHENS-100, verb-only track, trained on `training` split
-  (272 videos), evaluated on `validation` split (138 videos).
+  (495 videos), evaluated on `validation` split (138 videos).
 - **Features**:
   - **SlowFast**: 2304-dim features extracted with a SlowFast network pre-trained on
     EPIC-KITCHENS (official features, 30 fps, 32-frame window, feature stride 16;
     density ~1.875 vectors/sec).
   - **V-JEPA2**: 1024-dim features extracted with a frozen V-JEPA2 (ViT-L fpc32)
     backbone, density matched to SlowFast (~1.875 vectors/sec).
+  - **VideoMAE-L**: 1024-dim features from a VideoMAE-L-16x4x1 backbone
+    **finetuned on EPIC-KITCHENS verbs**, as released by OpenTAD (16-frame clips,
+    stride 8 at 30 fps, i.e. ~3.75 vectors/sec, 2x SlowFast). Config
+    `epic_videomae_verb.yaml`: identical recipe to SlowFast except `input_dim`,
+    `feat_stride: 8`, `num_frames: 16` and `max_seq_len: 4608` (same temporal span).
 - **Evaluation metric**: mAP at tIoU in {0.1, 0.2, 0.3, 0.4, 0.5} and the average,
   following the ActionFormer paper.
 
@@ -114,7 +123,8 @@ the SSL encoder.
 | Control: baseline + same joint fine-tune, no SSL, final epoch | 26.41 | 25.16 | 23.55 | 21.52 | 18.22 | **22.97** |
 | SSL pretrain → supervised (SlowFast, pipeline 3) | 26.72 | 25.63 | 24.10 | 22.37 | 18.99 | **23.56** |
 | Supervised baseline (V-JEPA2) | 20.51 | 19.74 | 18.38 | 16.17 | 12.64 | **17.49** |
-| SSL pretrain → supervised (V-JEPA2, pipeline 3) | *pending* | | | | | *pending* |
+| SSL pretrain → supervised (V-JEPA2, pipeline 3) | 20.33 | 19.49 | 18.11 | 15.87 | 13.19 | **17.40** |
+| Supervised baseline (VideoMAE-L, EPIC-finetuned) | 32.84 | 32.06 | 30.42 | 28.11 | 24.59 | **29.60** |
 
 ### 3.2 Joint fine-tune ablation, per epoch
 
@@ -127,6 +137,17 @@ Average mAP of the EMA model after each fine-tune epoch:
 
 The gap to the control (~0.5 pp) is flat across all six epochs: there is no upward
 trend that a longer fine-tune at this learning rate would plausibly extend.
+
+### 3.2.1 V-JEPA2 pipeline 3 vs. baseline, per epoch
+
+| Epoch | 1 | 5 | 10 | 15 | 20 | 21 |
+|---|---|---|---|---|---|---|
+| V-JEPA2 baseline (random init) | 0.07 | 5.56 | 12.53 | 16.03 | 17.40 | 17.49 |
+| V-JEPA2, SSL-pretrained encoder | 0.06 | 5.54 | 12.84 | 16.24 | 17.35 | 17.40 |
+
+The SSL-initialized run is marginally ahead mid-training (+0.2–0.3 pp at epochs
+10/15) but converges to the same value; the two curves are indistinguishable at
+the end.
 
 ### 3.3 SSL training signals
 
@@ -189,6 +210,9 @@ Notes on comparability:
   feature release; comparisons within this report all use the same features and
   recipe.
 - The V-JEPA2 track has no counterpart in the paper.
+- The VideoMAE-L baseline (29.60) is not comparable to the paper's SlowFast number:
+  its backbone was finetuned on EPIC verbs by OpenTAD. It is included as a stronger
+  feature track, not as a reproduction.
 
 ## 5. Analysis
 
@@ -256,7 +280,15 @@ initialization.
   EPIC-adapted, consistent with TAL features benefiting from in-domain fine-tuning.
 - Feature densities are matched (~1.875 vectors/sec), so the gap is not a sampling
   artifact.
-- V-JEPA2 through pipeline 3: *pending* (stage A complete, stage B training).
+- **EPIC-finetuned VideoMAE-L features are far stronger**: 29.60 avg mAP, +6.53 pp
+  over SlowFast and +12.1 pp over frozen V-JEPA2, ahead at every tIoU threshold
+  with the unmodified SlowFast recipe (only feature-shape parameters changed).
+  Feature quality dominates everything else in this report: the gap between
+  feature sets is an order of magnitude larger than any SSL effect.
+- **V-JEPA2 through pipeline 3: no gain.** 17.40 vs 17.49 (−0.09 pp). The only
+  threshold where the SSL-initialized model is ahead is tIoU 0.5 (13.19 vs 12.64);
+  the rest are 0.2–0.3 pp lower. The SSL stage itself converged normally (final val
+  NeCo loss 1.77, agreement 0.839, §3.3).
 
 ### 5.5 Conclusions
 
@@ -266,20 +298,26 @@ The effect of SSL depends on the protocol:
   **jointly re-training the heads does not rescue it** (22.45 vs a 22.97 control).
   The post-trained encoder is itself worse for localization.
 - **SSL pretraining on an untrained encoder, followed by ordinary supervised
-  training, does help** (23.56 vs 23.07, +0.49 pp), matching and marginally beating
-  the paper's number at every tIoU threshold, with no change to the supervised recipe
-  beyond the encoder's starting point.
+  training, helps on SlowFast** (23.56 vs 23.07, +0.49 pp), matching and marginally
+  beating the paper's number at every tIoU threshold, with no change to the
+  supervised recipe beyond the encoder's starting point.
+- **The same protocol gives no gain on V-JEPA2** (17.40 vs 17.49). The pipeline-3
+  effect therefore does not generalize across feature tracks, and on SlowFast it is
+  a single-seed +0.49 pp result -- it should be treated as tentative.
 
-In both protocols the SSL objective learns (loss falls, agreement rises). What
-matters is where it sits: as an initialization it acts as a useful prior for a full
-supervised run; applied afterwards it moves a task-tuned encoder away from what the
-task needs, and a short supervised fine-tune does not undo that.
+In every run the SSL objective learns (loss falls, agreement rises). The robust
+finding is the negative one: applied after supervised convergence, it moves a
+task-tuned encoder away from what the task needs, and a short supervised fine-tune
+does not undo that. Used as an initialization it is at worst harmless (V-JEPA2) and
+at best a modest gain (SlowFast).
 
 **Limitations.** All results are single runs with one seed. The differences under
-discussion are ~0.5 pp. Epoch-to-epoch variation of a converged model is ~±0.05 pp
+discussion are ~0.5 pp, and the one positive SSL result did not replicate on the
+second feature track. Epoch-to-epoch variation of a converged model is ~±0.05 pp
 (§3.2), but seed-to-seed variance has not been measured. Repeating the baseline and
 pipeline 3 with 2–3 seeds would be needed before calling the +0.49 pp gain
-significant.
+significant. The natural next test bed is the VideoMAE-L track, where the
+baseline is strongest.
 
 ## 6. Reproducibility Notes
 
@@ -300,7 +338,14 @@ significant.
   `ckpt/epic_slowfast_verb_joint_ft_{ssl_warm,ctrl}/`.
 - **Pipeline 3, V-JEPA2**: stage A `train_ssl_vjepa2_cold.slurm` (job 5093340, 7m45s)
   → `ckpt_ssl/ssl_epic_vjepa2_verb_neco_vjepa2_cold/`; stage B
-  `train_verb_vjepa2_from_ssl.slurm` (job 5093341; 207 encoder keys matched, 22
-  missing, 0 unexpected) → `ckpt/epic_vjepa2_verb_from_ssl_neco/`.
+  `train_verb_vjepa2_from_ssl.slurm` (job 5093405, 1h04; 207 encoder keys matched,
+  22 missing, 0 unexpected) → `ckpt/epic_vjepa2_verb_from_ssl_neco/epoch_021.pth.tar`.
+  A first attempt (job 5093341) was cancelled at epoch 15 by mistake and rerun from
+  scratch; its partial output is in `ckpt/_cancelled/`.
+- **VideoMAE-L baseline**: features in
+  `data/epic_kitchens/features_videomae_verb/` (OpenTAD release, 700 videos);
+  `train_verb_videomae.slurm` (job 5093406, 1h16) →
+  `ckpt/epic_videomae_verb_reproduce/epoch_021.pth.tar`. A first attempt (job
+  5093366) was likewise cancelled at epoch 5 and rerun.
 - **Figures**: `figs/ssl_pretrain_loss.{png,jpg}`,
   `figs/supervised_loss_comparison.{png,jpg}`, produced by `tools/plot_loss_curves.py`.
