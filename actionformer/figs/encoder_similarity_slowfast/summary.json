@@ -1,0 +1,25 @@
+{
+  "config": "configs/epic_slowfast_verb.yaml",
+  "ckpt_a": "ckpt/epic_slowfast_verb_reproduce/epoch_021.pth.tar",
+  "label_a": "regular supervised",
+  "ckpt_b": "ckpt/epic_slowfast_verb_from_ssl_neco/epoch_021.pth.tar",
+  "label_b": "SSL-init (temporal) -> supervised",
+  "num_videos": 60,
+  "cka_per_level": [
+    0.9152647087376707,
+    0.9319468311581286,
+    0.9409036707998645,
+    0.9404478979052014,
+    0.9266192765468124,
+    0.9194355226954372
+  ],
+  "cka_mean_over_levels": 0.9291029846405192,
+  "cosine_mean": 0.7093180418014526,
+  "cosine_median": 0.7131463885307312,
+  "cosine_p10": 0.6363829970359802,
+  "cosine_p90": 0.7770685255527496,
+  "per_video_cka_mean": 0.9723446433536976,
+  "per_video_cka_std": 0.009817971991703672,
+  "weight_cosine_backbone": 0.9755372264302267,
+  "weight_cosine_neck": 0.9999717630514355
+}

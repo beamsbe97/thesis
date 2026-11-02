@@ -124,12 +124,62 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - found pre-extracted EPIC-finetuned VideoMAE-L features (OpenTAD), verb + noun sets, 1024-d, stride 8
     - OpenTAD's ActionFormer SlowFast verb = 24.93 avg mAP (> our 23.07)
 
-# 25/9
-- seeds (SlowFast, n=3): baseline 23.38 +- 0.75 (22.84-24.23), pipeline 3 23.65 +- 0.08
-    - +0.27, not significant -> the +0.49 "beats paper" was baseline seed noise
-    - but pipeline 3 is MUCH more stable across seeds (range 0.16 vs 1.39)
-- VideoMAE-L (OpenTAD, EPIC-ft): baseline 29.60, post-train 29.24, pretrain 29.38
-    - post-training hurts on both tracks now; pretraining no gain
-- frame-rate aug (feature-level, per-view rate log-U[0.5,2]) + pipeline 3: 24.45 (1 seed!)
-    - +0.8 over pipeline 3 without it; first SSL variant above the baseline distribution
-    - next: replicate with seeds, then try on VideoMAE
+
+
+- consider saving checkpoints at earlier epochs, since downstream task can be similar to pretraining
+- next try spatial crops 
+
+# 
+- check if if epoch 1 they start that the same loss
+- see how much the features change after the post training
+- get the thesis cover page
+- focus more on why it doesnt work (important)
+
+# 22/10
+- encoder-similarity diagnostic (tools/visualize_encoder_similarity.py): linear
+  CKA per FPN level, per-position cosine, PCA, weight cosine between trained encoders.
+- SSL-init->supervised vs baseline (after supervised): CKA 0.93 (SlowFast) / 0.97
+  (VideoMAE); per-position cosine 0.71 / 0.87. Seed control (2 baseline seeds):
+  CKA 0.90, cosine ~0. So the SSL pair is about as similar as two seeds.
+- weight cosine is dominated by the SHARED INIT SEED, not training: a fresh init
+  with the training seed has wcos 0.974 with the trained supervised model (0.55 for
+  arbitrary init). Baseline and pipeline-3 shared init_rand_seed -> artifact.
+  (corrects earlier over-reading)
+- BIG ONE: SSL stage-A barely trains the encoder. rel L2 change from random init:
+  supervised backbone 0.238; SSL backbone 0.0046 (SlowFast / VideoMAE spatial /
+  VideoMAE temporal all); SSL head 0.12. So SSL trains only the projection head;
+  the "SSL encoder" is ~random init -> pipeline 3 = supervised from ~random init =
+  baseline. Mechanically explains all the null results.
+  causes: encoder lr 2e-5 vs head 2e-4 (head_lr_scale 10); global grad clip 1.0
+  starves the encoder; NeCo satisfiable by the head; only 12 epochs.
+- next: raise encoder lr (~1e-4), reduce/remove grad clip, lower head_lr_scale,
+  longer schedule; check backbone rel_delta >10%; then re-run stage A->B. If the
+  encoder now trains and mAP is still flat -> frozen-features claim holds; if it
+  improves -> the earlier nulls were an artifact.
+
+# 23/10
+- implemented the SSL-training fix and re-ran it (VideoMAE spatial):
+  encoder lr 2e-5 -> 1e-4, head_lr_scale 10 -> 1, clip_grad_l2norm 1 -> 5,
+  epochs 12 -> 20. Config `ssl_epic_videomae_verb_spatial_v2.yaml`.
+- stage A v2 (job 5318111): val loss 2.19, agreement 0.889 (v1: 2.80 / 0.843).
+  backbone rel_delta 0.056 (v1 0.0046) = 12x more, but still 4x less than the
+  supervised 0.238. So the fix helps, but NeCo still gives weak encoder
+  gradients (expressive head / EMA self-distillation is easy).
+- stage B v2 launched (job 5318166) -> compare to 29.60 baseline / 29.38 v1.
+- if still null: go more aggressive (higher encoder lr, weaker projection head,
+  no clip) before concluding anything about the features.
+- RESULT stage B v2: **avg mAP 28.65** (best 28.83 @ ep16) -> WORSE than v1
+  (29.38) and baseline (29.60). So forcing the encoder to train 12x more with
+  NeCo does not help; it slightly hurts. Caveats: 1 seed; encoder still only
+  5.6% vs supervised 23.8%, so not a fully-trained-encoder test. This weakens
+  the "SSL just wasn't training the encoder" explanation and points at the
+  NeCo objective / features instead. Next: either a much more aggressive v3
+  (stronger lr / weaker head / no clip) or pivot to feature-level ideas
+  (`feature_ideas.md`).
+
+
+  # 
+
+  - check if SSL loss curve starts lower or higher than normal training (takes more effort just to get to reuglar supervised learning baseline)
+  - plot the same graph for NeCo
+  - check what head/neck/backbones are actually, and why supervised has 0 head weight change, what is the head? for the specific task? reg/clf head? or what is it?

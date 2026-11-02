@@ -419,7 +419,216 @@ run. It is the obvious candidate for seed replication, and for testing on VideoM
 seed. The SlowFast baseline's seed spread (sd 0.75) means single-seed differences
 below ~1.5 pp should not be interpreted.
 
-## 6. Reproducibility Notes
+## 6. Encoder-level analysis: why SSL on the ActionFormer encoder does not help
+
+This section documents *why* the NeCo SSL stage does not improve downstream TAL,
+using weight-space and representation-space measurements rather than mAP alone.
+The short version:
+
+> **The frozen extracted features are the only information source, and SSL never
+> touches them. SSL only re-mixes them inside the ActionFormer encoder, and the
+> NeCo objective can be satisfied almost entirely by the projection head. After
+> supervised training both initialisations converge to essentially the same
+> encoder, so the residual differences are at seed-noise level. When the encoder
+> is *forced* to train more (v2), it moves slightly *away* from the supervised
+> optimum and mAP gets worse, not better.**
+
+### 6.1 What SSL can and cannot change
+
+```
+frozen extracted features (fixed .npy/.npz files)
+            |                              (SSL never touches these)
+            v
+    ActionFormer encoder (backbone + neck)   <-- the only thing SSL trains
+            v
+    task heads (cls / reg / center)          <-- only in supervised training
+```
+
+The extracted features are **byte-for-byte identical** across all runs: the
+backbone is frozen and there is no code path that rewrites the feature files.
+SSL can therefore only reshape *how the encoder combines* a fixed
+representation, never the representation itself. That bounds what any
+encoder-side SSL objective can achieve.
+
+### 6.2 The encoder barely moves during SSL
+
+Relative L2 change from the random init, measured per parameter group
+(`tools/plot_ssl_analysis.py`):
+
+| stage | backbone | neck | projection head |
+|---|---|---|---|
+| supervised (16 ep, lr 1e-4) | **0.238** | 0.014 | — |
+| SSL v1, SlowFast (12 ep, lr 2e-5) | 0.0047 | 0.0005 | 0.121 |
+| SSL v1, VideoMAE spatial | 0.0046 | 0.0005 | 0.123 |
+| SSL v1, VideoMAE temporal | 0.0046 | 0.0005 | 0.122 |
+| SSL v2 (encoder lr 1e-4, head×1, clip 5, 20 ep) | **0.0556** | 0.0036 | 0.100 |
+
+![Encoder weight movement](actionformer/figs/ssl_analysis_encoder_movement.png)
+
+Supervised training moves the backbone ~**24%**; SSL v1 moves it **0.46%**
+(50× less) while the projection head moves **12%**. So the "SSL-pretrained
+encoder" used by pipeline 3 is essentially a **random init**, and pipeline 3 =
+supervised from a random init = baseline. This alone explains the v1 null
+results. v2 (the fix) raises encoder movement 12× to 5.6%, still 4× below
+supervised.
+
+### 6.3 The SSL stage-A representation is far from the supervised one
+
+Linear CKA between the SSL stage-A encoder and the trained supervised encoder
+(60/40 validation videos, `tools/visualize_encoder_similarity.py`):
+
+| pair | mean CKA | per-position cosine |
+|---|---|---|
+| SSL stage-A vs supervised (VideoMAE) | 0.664 | 0.424 |
+| SSL stage-A vs supervised (SlowFast) | 0.489 | 0.260 |
+| random init vs supervised (VideoMAE) | 0.619 | 0.007 |
+| random init vs supervised (SlowFast) | 0.486 | 0.002 |
+
+The SSL encoder's representation is **about as far from the supervised
+representation as an untrained random init** — i.e. NeCo does not move the
+representation toward the supervised solution.
+
+### 6.4 After supervised training, both encoders converge to nearly the same representation
+
+| pair | mean CKA | per-position cosine |
+|---|---|---|
+| baseline vs SSL v1 → supervised (VideoMAE) | **0.970** | 0.873 |
+| baseline vs SSL v1 → supervised (SlowFast) | 0.929 | 0.709 |
+| baseline vs SSL v2 → supervised (VideoMAE) | 0.943 | 0.685 |
+| baseline vs **baseline seed1** (noise floor) | 0.899 | −0.003 |
+| SSL v1 → supervised vs baseline seed1 | 0.896 | −0.004 |
+
+![CKA between encoder representations](actionformer/figs/ssl_analysis_cka.png)
+
+The last two rows are the decisive comparison: when the seed differs, the
+SSL-initialised encoder is **exactly as different from a baseline as two random
+seeds are from each other**. So the SSL init leaves no distinguishable trace on
+the final encoder. The PCA panel below (baseline vs SSL v1 → supervised,
+VideoMAE) shows near-total overlap:
+
+![PCA / CKA / cosine of the two encoders](actionformer/figs/encoder_similarity_videomae/encoder_similarity.png)
+
+### 6.5 Weight-cosine is a shared-init artifact (a caution)
+
+The backbone weight-cosine between baseline and SSL v1 → supervised is **0.976**,
+which looks like "SSL barely changed the weights." But:
+
+| comparison | weight cosine |
+|---|---|
+| supervised vs fresh init **with the training seed** | **0.974** |
+| supervised vs fresh init with an arbitrary seed | 0.550 |
+| SSL stage-A vs fresh init with the training seed | **1.0006** |
+
+A *fresh* model initialised with the training seed already has weight-cosine
+0.974 with the trained supervised model. So the metric mostly measures whether
+two runs **shared the same random init** (both runs used the same
+`init_rand_seed`), not whether SSL had an effect. Weight-cosine is therefore not
+a usable indicator here; CKA and the relative-delta measures above are the
+informative ones.
+
+### 6.6 Forcing the encoder to train more (v2) makes it slightly worse
+
+v2 changed exactly the suspects from §6.2: encoder lr 2e-5 → 1e-4,
+`head_lr_scale` 10 → 1, `clip_grad_l2norm` 1 → 5, epochs 12 → 20.
+
+| | v1 | v2 |
+|---|---|---|
+| backbone rel. change from init | 0.0046 | 0.056 |
+| val NeCo loss | 2.80 | **2.19** |
+| neighbour agreement | 0.843 | **0.889** |
+| CKA to baseline after supervised | 0.970 | 0.943 |
+| **downstream avg mAP** | **29.38** | **28.65** |
+
+So increasing encoder training improves the SSL metrics but **degrades**
+downstream TAL and pushes the final representation slightly further from
+baseline. This weakens the "SSL simply wasn't training the encoder" explanation:
+even when the encoder does move, NeCo moves it in an unhelpful direction.
+
+### 6.7 Crop style is irrelevant
+
+All VideoMAE-L variants, same objective/encoder/downstream recipe:
+
+| variant | avg mAP |
+|---|---|
+| baseline | **29.60** |
+| temporal-crop SSL | 29.38 |
+| spatial-crop SSL | 29.38 |
+| spatial+temporal SSL | 28.90 |
+| spatial-crop SSL (v2) | 28.65 |
+
+![Downstream mAP](actionformer/figs/ssl_analysis_map.png)
+
+Temporal, spatial and combined crops all land below the baseline, which is what
+you would expect if the binding constraint is the frozen representation rather
+than the augmentation.
+
+### 6.8 Explanation
+
+1. **Information is fixed before SSL.** The features are already EPIC-finetuned;
+   SSL and the baseline see exactly the same tensors.
+2. **The objective is not task-aligned.** NeCo enforces neighbour-order
+   consistency across augmentations, not action boundaries or verb classes.
+3. **The head absorbs it.** The self-generated EMA target is easy to satisfy
+   with the expressive projection head, so the encoder barely moves (§6.2) and
+   its representation stays far from supervised (§6.3).
+4. **Supervised training dominates.** From either init, supervised training
+   converges to CKA 0.94–0.97 vs baseline, versus a 0.90 seed-noise floor
+   (§6.4). Residual differences are at seed-noise level.
+5. **More SSL training is mildly harmful** (§6.6), because it moves the encoder
+   away from the supervised optimum rather than toward a better one.
+
+Together these explain the headline finding: **feature choice dominates (+6.2 pp
+VideoMAE-L over SlowFast) while every SSL variant changes mAP by <1 pp and
+downward.** The bottleneck is the frozen feature representation, not the crop
+style, not the encoder init, and not (for v2) the amount of encoder SSL
+training.
+
+### 6.9 What would change the outcome
+
+To act on the *information content* instead of re-mixing it (see
+`feature_ideas.md`): fine-tune the backbone end-to-end (adapter/LoRA),
+domain-adaptive MAE pretraining on EPIC videos, stronger features
+(InternVideo2), or audio fusion.
+
+Remaining caveats: v2 still moved the encoder only 5.6% vs supervised 23.8%, so a
+*fully-trained-encoder* run (much higher encoder lr / weaker head / no clip) is
+the last untested configuration; VideoMAE seed noise was not measured; CKA 0.90
+is the generic floor between any two trained ActionFormers.
+
+### 6.10 Methods
+
+- `tools/visualize_encoder_similarity.py` — linear CKA per FPN level,
+  per-position cosine, PCA scatter, weight cosine; loads two checkpoints
+  (including `--use-ema` for the SSL teacher and `--random-a` for an untrained
+  control) and encodes the same validation videos through `backbone → neck`.
+- `tools/plot_ssl_analysis.py` — weight-movement, CKA and mAP figures + a JSON
+  summary (`figs/ssl_analysis_summary.json`).
+- Figures: `figs/ssl_analysis_encoder_movement.png`, `figs/ssl_analysis_cka.png`,
+  `figs/ssl_analysis_map.png`, `figs/encoder_similarity_*/encoder_similarity.png`.
+- Metrics: *relative L2 delta* = ||W − W_init||₂/||W_init||₂ per parameter group;
+  *linear CKA* = ||XᵀY||²_F/(||XᵀX||_F·||YᵀY||_F) on centered per-position
+  feature matrices (rotation-invariant).
+
+**CKA in brief.** Centered Kernel Alignment compares two representations of the
+*same* n examples by the geometry they induce (which examples are similar to
+which). For column-centred feature matrices X (n×p) and Y (n×q),
+
+```
+CKA = ||XᵀY||²_F / ( ||XᵀX||_F · ||YᵀY||_F )  ∈ [0, 1]
+```
+
+It equals 1 when Y is X up to a rotation/reflection/isotropic scaling, and ≈0
+when the two are unrelated; it works when p ≠ q. Two consequences matter here:
+(a) because CKA is rotation-invariant, it can be high while per-position cosine
+is ≈0 (same geometry, rotated feature basis) — so both are reported; (b) absolute
+values are only meaningful against a control. In this work two independently
+seeded baselines give CKA **0.90**, which is the "same recipe, different seed"
+floor; baseline vs SSL → supervised is **0.94–0.97** (just above it), whereas the
+SSL stage-A encoder vs supervised is **0.49–0.66** (far below). CKA therefore
+answers "is the *information* the same?", while cosine answers "are the *vectors*
+aligned in the same basis?".
+
+## 7. Reproducibility Notes
 
 - All results: EPIC-100 **verb** task, validation split.
 - **Supervised baselines**: `train_verb_4621944.out` (V-JEPA2, 17.49) and

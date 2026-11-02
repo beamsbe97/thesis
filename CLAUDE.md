@@ -21,6 +21,8 @@ bundle` and pushed from there (Alice's SSH key is the one with write access).
   (an alternative to SlowFast features) for the ActionFormer input track.
 - `current_lit.md` — running research notes/log (dated entries), the primary
   place decisions and dead ends are recorded day-to-day.
+- `feature_ideas.md` — brainstormed directions for improving the *features*
+  (the dominant lever for downstream TAL), with leverage/cost estimates.
 - `actionformer/report.md` — the write-up of the *first* SSL experiment
   (post-training / warm-start protocol). Predates the pretrain-first pipeline
   documented here.
@@ -138,6 +140,9 @@ EPIC-100 verb, validation split, mAP @ tIoU (avg of 0.1–0.5):
 | Supervised baseline (VideoMAE-L, EPIC-finetuned, OpenTAD feats) | 32.84 | 32.06 | 30.42 | 28.11 | 24.59 | **29.60** |
 | VideoMAE-L + SSL post-training, frozen heads (pipeline 2) | 32.65 | 31.80 | 29.96 | 27.83 | 23.97 | **29.24** |
 | VideoMAE-L SSL pre-train → supervised (pipeline 3) | 32.83 | 32.23 | 30.58 | 27.84 | 23.46 | **29.38** |
+| VideoMAE-L **spatial-crop** SSL pre-train → supervised (pipeline 3) | 32.65 | 32.01 | 30.41 | 27.78 | 24.05 | **29.38** |
+| VideoMAE-L **spatial+temporal** SSL pre-train → supervised (pipeline 3) | 32.44 | 31.61 | 29.58 | 27.23 | 23.65 | **28.90** |
+| VideoMAE-L spatial-crop SSL, fixed training (v2) → supervised | 31.62 | 30.97 | 29.35 | 27.28 | 24.03 | **28.65** |
 | SlowFast pipeline 3 + frame-rate augmentation in SSL (1 seed) | 27.92 | 26.68 | 25.15 | 22.79 | 19.70 | **24.45** |
 
 **Seed replicates (SlowFast, n=3 each):** baseline 23.07 / 22.84 / 24.23 =
@@ -211,7 +216,99 @@ than by heads being trainable per se. Caveat: short/low-LR fine-tune only;
 a full-length schedule from the SSL-post encoder is the untested remaining
 variant (it would converge toward pipeline 3's protocol).
 
+## SSL diagnostic: the encoder is barely trained (2026-10-22)
+
+Ran `tools/visualize_encoder_similarity.py` (linear CKA per FPN level, per-position
+cosine, PCA scatter, weight cosine) to compare trained encoders.
+
+1. **Representation similarity.** SSL-init -> supervised vs baseline, *after*
+   supervised training: CKA 0.93 (SlowFast) / 0.97 (VideoMAE), per-position cosine
+   0.71 / 0.87. A seed control (two baseline seeds) gives CKA 0.90, cosine ~0. So
+   the two encoders are about as similar as two independent seeds.
+
+2. **Weight-cosine is dominated by the shared init seed, not by training.** A fresh
+   model initialised with the training seed has weight-cosine 0.974 with the trained
+   supervised model (0.55 for an arbitrary init). Baseline and pipeline-3 both used
+   the same `init_rand_seed`, so their high weight-cosine is an artifact. (This
+   corrects an earlier over-interpretation of the weight-cosine 2x2.)
+
+3. **The SSL stage trains only the projection head.** Relative L2 change from the
+   random init after stage A:
+
+   | run | backbone | neck | head |
+   |---|---|---|---|
+   | supervised (16 ep, lr 1e-4) | **0.238** | 0.014 | — |
+   | SSL SlowFast (12 ep, lr 2e-5) | 0.0047 | 0.0005 | 0.121 |
+   | SSL VideoMAE spatial | 0.0046 | 0.0005 | 0.123 |
+   | SSL VideoMAE temporal | 0.0046 | 0.0005 | 0.122 |
+
+   The encoder moves ~**50x less** than under supervised training; the head changes
+   12%. So the "SSL-pretrained encoder" is essentially a **random init**, and
+   pipeline 3 = supervised from ~random init = baseline. This mechanically explains
+   the null results (pipelines 2 and 3).
+
+4. **Likely causes:** encoder lr (2e-5) is 10x below the head lr (2e-4,
+   `head_lr_scale: 10`); `clip_grad_l2norm: 1.0` is global so the head's gradient
+   starves the encoder; the NeCo objective is largely satisfiable by the expressive
+   head; short schedule (12 ep, cosine to 0).
+
+**Implication:** "SSL doesn't help" may be an artifact of the SSL stage not training
+the encoder. Next: raise the encoder lr (to ~1e-4), drop/reduce global grad
+clipping, lower `head_lr_scale`, train longer; verify the backbone rel_delta becomes
+substantial (>10%), then re-run stage A -> stage B. If the encoder then trains and
+downstream still does not improve, the "frozen features" claim is supported; if it
+improves, the earlier null results were an artifact.
+
+Full write-up with figures and all measurements: **`report.md` §6** (2026-10-29),
+including the shared-init weight-cosine artifact and the v2 result (28.65).
+
 ## Current status
+
+- 2026-10-23: **SSL-training fix + re-run (VideoMAE spatial, v2)**. Config
+  `configs/ssl_epic_videomae_verb_spatial_v2.yaml`: encoder lr 2e-5 -> **1e-4**,
+  `head_lr_scale` 10 -> **1**, `clip_grad_l2norm` 1 -> **5**, epochs 12 -> **20**.
+  Stage A (job 5318111): val loss **2.19**, agreement **0.889** (v1: 2.80/0.843).
+  Backbone rel_delta **0.056** vs init (v1: 0.0046) — 12x more, but still 4x
+  below supervised (0.238): the fix helps but NeCo still gives weak encoder
+  gradients. Stage B (job 5318166): **avg mAP 28.65** (best 28.83) — *worse* than
+  v1 (29.38) and baseline (29.60). Forcing the encoder to train 12x more with
+  NeCo does not help; it slightly hurts. Caveat: 1 seed; encoder still only 5.6%
+  vs supervised 23.8%. Weakens "SSL just wasn't training the encoder" and points
+  at the NeCo objective / features instead.
+
+- 2026-10-22: encoder-similarity diagnostic (above): SSL stage-A moves the encoder
+  only ~0.5% from init (supervised moves it ~24%), i.e. the SSL stage effectively
+  trains only the projection head -> explains the null pipeline-2/3 results. Weight
+  cosine shown to be a shared-init artifact. Script:
+  `tools/visualize_encoder_similarity.py`; figures under
+  `figs/encoder_similarity_*`. Planned fix: encoder lr up, grad-clip down, re-run.
+
+- 2026-10-09: spatial-crop extraction **complete** (628/633 videos, 1,152,051
+  snippets; 5 corrupt MP4s skipped). **Stage A spatial-crop NeCo SSL** (job
+  5175368, random init) converged cleanly (val loss 11.97→2.80, agreement
+  0.843). **Stage B supervised** (job 5175414, `--init-encoder`: 207 matched,
+  0 unexpected) = **avg mAP 29.38** (best 29.46) — **no gain** vs the 29.60
+  baseline, same as the temporal-crop SSL (29.38). Replicates "SSL pretraining
+  gives no mean gain on VideoMAE-L". Curves: `figs/ssl_pretrain_loss_spatial.png`,
+  `figs/supervised_loss_comparison_spatial.png`; details
+  `actionformer/SPATIAL_EXTRACTION.md`.
+- 2026-10-09 (later): **combined spatial+temporal crops** launched to test
+  whether crop *style* is the limit (`sslv3` = spatial crop + random temporal
+  crop per view). Stage A job **5176610**, stage B **5176611** (chained).
+  Config `configs/ssl_epic_videomae_verb_spatial_temporal.yaml`. Result pending.
+
+- 2026-10-08: **spatial-crop SSL workstream started** (VideoMAE-L first).
+  Design: keep VideoMAE's dense spatial tokens, sample two spatial crops as the
+  two views, pool each crop to `(T, 1024)`, reuse the existing ActionFormer SSL
+  encoder + NeCo loss (pipeline-3 transfer intact). Code added but not yet
+  committed: `libs/datasets/ssl2d.py` (`sslv2`), `build_views` per-view source,
+  `configs/ssl_epic_videomae_verb_spatial.yaml`, `tools/videomae_backbone.py`,
+  `tools/extract_videomae_spatial.py`, SLURM scripts, `README.md` section, and
+  `actionformer/SPATIAL_EXTRACTION.md`. Extraction launched on ALICE (jobs
+  5166540/5166541, `gpu-mig-40g`, ~17 h, output
+  `data/epic_kitchens/features_videomae_verb_spatial`). Note: released
+  SlowFast/VideoMAE features are spatially *pooled*, so re-extraction is
+  unavoidable for spatial crops. Check/resume: `actionformer/SPATIAL_EXTRACTION.md`.
 
 - 2026-09-25 (afternoon): all 12 jobs of the seed / rate-aug / VideoMAE-SSL batch
   done (5094852–5094863), results above and in root `report.md` §3.5, §5.2, §5.5.
@@ -264,3 +361,7 @@ variant (it would converge toward pipeline 3's protocol).
    on VideoMAE-L.
 6. OpenTAD's ActionFormer-SlowFast verb number is 24.93, above our 23.07
    repro — worth checking against their SlowFast features.
+8. ~~**Spatial-crop SSL** (VideoMAE-L)~~ — done 2026-10-09: 29.38 (no gain vs
+   29.60; same as temporal-crop SSL). **Combined spatial+temporal crops** now
+   running (jobs 5176610/5176611) to test whether crop style is the limit.
+   Remaining follow-ups: SlowFast (needs its extractor), V-JEPA2.

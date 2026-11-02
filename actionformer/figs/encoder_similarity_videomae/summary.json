@@ -1,0 +1,25 @@
+{
+  "config": "configs/epic_videomae_verb.yaml",
+  "ckpt_a": "ckpt/epic_videomae_verb_reproduce/epoch_021.pth.tar",
+  "label_a": "regular supervised",
+  "ckpt_b": "ckpt/epic_videomae_verb_from_ssl_neco_spatial/epoch_021.pth.tar",
+  "label_b": "SSL-init (spatial) -> supervised",
+  "num_videos": 40,
+  "cka_per_level": [
+    0.9642699120087077,
+    0.9706812717457663,
+    0.975416924178774,
+    0.9766736406890864,
+    0.9726098654367608,
+    0.9595143227793954
+  ],
+  "cka_mean_over_levels": 0.9698609894730819,
+  "cosine_mean": 0.8728224039077759,
+  "cosine_median": 0.8732669353485107,
+  "cosine_p10": 0.8453298330307006,
+  "cosine_p90": 0.9004184246063233,
+  "per_video_cka_mean": 0.9879925152519536,
+  "per_video_cka_std": 0.004749090835890693,
+  "weight_cosine_backbone": 0.9874669829266421,
+  "weight_cosine_neck": 0.9999874402787238
+}

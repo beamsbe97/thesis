@@ -1,0 +1,81 @@
+dataset_name: sslv2
+model_name: PtTransformerSSL
+train_split: ['training']
+val_split: ['validation']
+dataset: {
+  json_file: ./data/epic_kitchens/annotations/epic_kitchens_100_verb.json,
+  feat_folder: ./data/epic_kitchens/features_videomae_verb_spatial,
+  file_prefix: ~,
+  file_ext: .npy,
+  num_classes: 97,
+  input_dim: 1024,
+  feat_stride: 8,
+  num_frames: 16,
+  default_fps: 30,
+  max_seq_len: 4608,
+}
+model: {
+  regression_range: [[0, 4], [2, 8], [4, 16], [8, 32], [16, 64], [32, 10000]],
+  fpn_type: identity,
+  max_buffer_len_factor: 4.0,
+  n_mha_win_size: 9,
+}
+ssl: {
+  method: neco,
+  n_bins: 32,
+  crop_scale: [0.25, 1.0],
+  min_overlap: 0.2,
+  num_crops: 16,
+  # projection head
+  head: {
+    hidden_dim: 2048,
+    out_dim: 256,
+    num_layers: 3,
+    with_mixer: true,
+    dropout: 0.1,
+  },
+  loss: {
+    ref_fraction: 0.5,
+    tau_rank: 0.1,
+    tau_perm: 0.1,
+    top_k: 0,
+  },
+  ema: {
+    start_momentum: 0.9995,
+    end_momentum: 1.0,
+  },
+  # FIX (2026-10-23): the encoder barely moved in v1. head_lr_scale was 10
+  # (head lr 2e-4 vs encoder 2e-5) and the global grad clip (1.0) let the head
+  # starve the encoder. Now encoder lr == head lr (scale 1) and a looser clip.
+  head_lr_scale: 1.0,
+}
+opt: {
+  type: AdamW,
+  # FIX: encoder lr 2e-5 -> 1e-4 (matches the supervised baseline; v1 moved the
+  # backbone only ~0.5% from init vs ~24% under supervised training)
+  learning_rate: 0.0001,
+  # FIX: 10 epochs -> 18 (+2 warmup = 20 effective) to give the encoder time
+  epochs: 18,
+  warmup: true,
+  warmup_epochs: 2,
+  schedule_type: cosine,
+  weight_decay: 0.05,
+}
+loader: {
+  batch_size: 4,
+  num_workers: 4,
+}
+train_cfg: {
+  dropout: 0.0,
+  droppath: 0.1,
+  # FIX: 1.0 -> 5.0 (looser global clip so the head does not starve the encoder)
+  clip_grad_l2norm: 5.0,
+}
+test_cfg: {
+  pre_nms_topk: 5000,
+  max_seg_num: 2000,
+  min_score: 0.001,
+  nms_sigma: 0.4,
+  multiclass_nms: True,
+}
+output_folder: ./ckpt_ssl/

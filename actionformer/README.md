@@ -444,6 +444,75 @@ Monitor with TensorBoard (`train/final_loss`, `train/neco_top1_agreement`, `trai
 
 **Fine-tuning.** Checkpoints store the EMA teacher in `state_dict_ema` (plus student `state_dict`, `optimizer`, `scheduler`). To fine-tune supervised downstream, load the EMA weights into `LocPointTransformer` (keys match; drop the extra `head.*` parameters). This is the same path used by `--init-encoder` in reverse.
 
+## Self-Supervised Spatial-Crop Views (NeCo-style, VideoMAE-L)
+The section above adapts NeCo's 2D *spatial* crops to 1D *temporal* crops, because the pooled clip features have no spatial axis left to crop. This add-on implements the spatial variant for the **VideoMAE-L** track: the backbone's dense spatial tokens are kept, and the two views are two *spatial crops* of the same video.
+
+**Design.** The SlowFast / VideoMAE feature releases are spatially pooled, so a spatial crop cannot be taken on them. The OpenTAD VideoMAE-L EPIC-Verb checkpoint is therefore run locally to produce the dense token grid `(8 temporal x 14x14 spatial x 1024)` at the same density as the released features (30 fps, stride 8, ~3.75 feat/s). Each of the `K` pre-sampled spatial crops is reduced to a `(T, 1024)` sequence by mean-pooling the tokens inside its box, so the **existing** ActionFormer SSL encoder and the **existing** NeCo loss (over time) are reused unchanged. This keeps the pipeline-3 pretrain -> supervised transfer intact: the SSL encoder weights still drop straight into `train.py --init-encoder`.
+
+**Why pre-extracted crops, not per-epoch sampling.** Storing the full `(T, 14, 14, 1024)` grid for every video is ~2 TB, so each video stores a fixed pool of `K` pooled crop views instead; the two views of an item are sampled from that pool with an overlap constraint. Storing one file per crop means an item reads only the two crops it uses.
+
+**Feature format** (produced by the extractor, consumed by `sslv2`):
+```
+data/epic_kitchens/features_videomae_verb_spatial/<video_id>/
+    meta.json         {"K": 16, "T": <snippets>, "grid": [14, 14]}
+    boxes.npy         (K, 4) normalized [x0, y0, x1, y1]; index 0 = full frame
+    view_000.npy ...  (T, 1024) fp16   (one pooled spatial crop per file)
+```
+
+**New files**
+* `libs/datasets/ssl2d.py` — `SelfSupSpatialDataset` (registered as `"sslv2"`): enumerates videos from the json db, loads the two selected crops as a `(2, C, T)` `view_feats` stack, random temporal window capped at `max_seq_len`, and `select_spatial_pair` (two crops whose intersection covers `>= min_overlap` of the smaller crop; validation uses the deterministic highest-overlap pair).
+* `tools/videomae_backbone.py` — dependency-free VideoMAE-L ViT (plain PyTorch, no mmaction/mmcv) matching the OpenTAD checkpoint key layout (`backbone.*`, `cls_head.*`); `load_videomae()` loads it strictly and `forward_tokens()` returns the dense grid.
+* `tools/extract_videomae_spatial.py` — decodes EPIC MP4s (PyAV), samples the 30 fps timeline, runs VideoMAE **once** per snippet, and pools the token grid into the `K` crop views (shardable and resumable; `--num-shards/--shard-index`).
+* `configs/ssl_epic_videomae_verb_spatial.yaml` — stage-A SSL config (`sslv2`, `num_crops: 16`, `crop_scale: [0.25, 1.0]`, `min_overlap: 0.2`).
+* `train_ssl_videomae_spatial.slurm` / `train_verb_videomae_from_ssl_spatial.slurm` — stage A (random-init SSL) / stage B (supervised `--init-encoder`) jobs.
+* `train_ssl.py` — `build_views` extended to accept a per-view `view_feats` source; the temporal (`sslv1`) path is unchanged.
+
+**Training.**
+```shell
+# stage A: spatial-crop NeCo SSL from random init
+python ./train_ssl.py ./configs/ssl_epic_videomae_verb_spatial.yaml --output neco_spatial
+# stage B: standard supervised training seeded from the SSL EMA encoder
+python ./train.py ./configs/epic_videomae_verb.yaml \
+    --init-encoder ./ckpt_ssl/ssl_epic_videomae_verb_spatial_neco_spatial/epoch_012.pth.tar \
+    --output from_ssl_neco_spatial
+```
+
+**Status (as of 2026-10-09).** Complete. The `K=16` extraction covered **628 / 633** videos (1,152,051 snippets, ~39 GB); the 5 missing are corrupt MP4s PyAV cannot decode. **Stage A** spatial-crop NeCo SSL (random init) converged cleanly (val NeCo loss 11.97 → **2.80**, neighbor agreement → **0.843**). **Stage B** supervised VideoMAE-L seeded from the SSL EMA encoder (`init-encoder`: 207 matched, 22 missing, 0 unexpected) reached **avg mAP 29.38** (best 29.46), i.e. **no gain** over the supervised baseline **29.60** and the same as the temporal-crop SSL result (29.38). This replicates the thesis's finding that NeCo SSL pretraining does not raise mean mAP on VideoMAE-L; the spatial-crop variant is no exception. Details: `SPATIAL_EXTRACTION.md`.
+
+## Evaluation results
+EPIC-KITCHENS-100 verb, validation split, avg mAP over tIoU {0.1, 0.2, 0.3, 0.4, 0.5}. Pipeline 3 = SSL pretrain on a **random-init** encoder, then the standard supervised recipe.
+
+| Model | avg mAP |
+|---|---|
+| VideoMAE-L — supervised baseline | **29.60** |
+| VideoMAE-L — temporal-crop SSL → supervised | 29.38 |
+| VideoMAE-L — spatial-crop SSL → supervised | 29.38 (best 29.46) |
+| VideoMAE-L — spatial+temporal SSL → supervised | 28.90 |
+| VideoMAE-L — spatial-crop SSL (fixed training) → supervised | 28.65 (best 28.83) |
+| SlowFast — supervised baseline | 23.38 ± 0.75 (n=3) |
+| SlowFast — SSL → supervised | 23.65 ± 0.08 (n=3) |
+| V-JEPA2 — supervised baseline | 17.49 |
+| V-JEPA2 — SSL → supervised | 17.40 |
+
+Per-threshold, VideoMAE-L spatial-crop SSL (tIoU 0.1→0.5): 32.65 / 32.01 / 30.41 / 27.78 / 24.05.
+No SSL variant beats the supervised baseline; features dominate (+6.2 pp VideoMAE-L over SlowFast).
+
+## Training curves
+Loss curves from the SSL / supervised experiments (also referenced in `../report.md`):
+
+| Figure | What it shows |
+|---|---|
+| `figs/ssl_pretrain_loss.png` | Stage-A temporal-crop NeCo SSL pretraining loss + top-1 neighbor agreement |
+| `figs/supervised_loss_comparison.png` | Supervised training loss, baseline vs. temporal-crop SSL-initialized encoder |
+| `logs/training_curves.png` | Supervised ActionFormer training curves |
+| `figs/ssl_pretrain_loss_spatial.png` | Stage-A **spatial-crop** NeCo SSL (VideoMAE-L) pretraining loss + agreement |
+| `figs/supervised_loss_comparison_spatial.png` | Supervised VideoMAE-L training loss, baseline vs. **spatial-crop** SSL init |
+
+![SSL pretraining loss](figs/ssl_pretrain_loss.png)
+![Supervised loss comparison](figs/supervised_loss_comparison.png)
+![Spatial-crop SSL pretraining loss](figs/ssl_pretrain_loss_spatial.png)
+![Spatial-crop supervised loss comparison](figs/supervised_loss_comparison_spatial.png)
+
 ## Training and Evaluating Your Own Dataset
 Work in progress. Stay tuned.
 

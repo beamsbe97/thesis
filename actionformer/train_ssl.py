@@ -35,13 +35,21 @@ def build_views(video_list, view_idx, div_factor, max_seq_len, device, dtype=Non
     crop [s, e) is resampled by linear interpolation at raw positions
     s, s + r, s + 2r, ... (r = 1 is an exact slice).
 
+    Two feature layouts are supported:
+      - temporal crops (`sslv1`): one (C, T) sequence per video in `feats`,
+        sliced by `crop_box[view_idx]`;
+      - spatial crops (`sslv2`): a (2, C, T) stack of pre-pooled crop views in
+        `view_feats`, where view_idx selects the crop (its `crop_box` entry is
+        the full window, so the slice below is a no-op).
+
     Returns (x (B, C, P), mask (B, 1, P) bool, view_start (B,) float,
              view_rate (B,) float).
     """
     B = len(video_list)
-    C = video_list[0]['feats'].size(0)
+    src0 = video_list[0].get('view_feats')
+    C = src0.size(1) if src0 is not None else video_list[0]['feats'].size(0)
     if dtype is None:
-        dtype = video_list[0]['feats'].dtype
+        dtype = (src0 if src0 is not None else video_list[0]['feats']).dtype
 
     starts = []
     lens = []
@@ -66,14 +74,17 @@ def build_views(video_list, view_idx, div_factor, max_seq_len, device, dtype=Non
             continue
         s, e = v['crop_box'][view_idx]
         r = rates[i]
+        # per-view feature source: pre-pooled spatial crop view, or the single
+        # temporal sequence sliced by crop_box (see the docstring)
+        src = v['view_feats'][view_idx] if 'view_feats' in v else v['feats']
         if r == 1.0:
-            view = v['feats'][:, s:e]
+            view = src[:, s:e]
         else:
             pos = s + torch.arange(L, dtype=torch.float64) * r
             lo = pos.floor().long().clamp(max=e - 1)
             hi = (lo + 1).clamp(max=e - 1)
-            w = (pos - lo.to(pos.dtype)).to(v['feats'].dtype)
-            view = v['feats'][:, lo] * (1.0 - w) + v['feats'][:, hi] * w
+            w = (pos - lo.to(pos.dtype)).to(src.dtype)
+            view = src[:, lo] * (1.0 - w) + src[:, hi] * w
         x[i, :, :L].copy_(view.to(device).to(dtype))
         mask[i, 0, :L] = True
 
@@ -313,6 +324,13 @@ def main(args):
     dataset_kwargs['min_overlap'] = ssl_cfg.get('min_overlap', 0.2)
     dataset_kwargs['min_crop_len'] = ssl_cfg.get('min_crop_len', 128)
     dataset_kwargs['rate_range'] = ssl_cfg.get('rate_range', [1.0, 1.0])
+    # combined spatial+temporal crops (`sslv3`); ignored by `sslv1`/`sslv2`
+    dataset_kwargs['temporal_crop_scale'] = ssl_cfg.get(
+        'temporal_crop_scale', [0.4, 1.0])
+    dataset_kwargs['temporal_min_overlap'] = ssl_cfg.get(
+        'temporal_min_overlap', 0.2)
+    dataset_kwargs['temporal_min_crop_len'] = ssl_cfg.get(
+        'temporal_min_crop_len', 256)
 
     train_dataset = make_dataset(
         cfg['dataset_name'], True, cfg['train_split'], **dataset_kwargs)

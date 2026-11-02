@@ -1,0 +1,25 @@
+{
+  "config": "configs/epic_slowfast_verb.yaml",
+  "ckpt_a": "ckpt/epic_slowfast_verb_reproduce/epoch_021.pth.tar",
+  "label_a": "baseline seed0",
+  "ckpt_b": "ckpt/epic_slowfast_verb_reproduce_seed1/epoch_021.pth.tar",
+  "label_b": "baseline seed1",
+  "num_videos": 60,
+  "cka_per_level": [
+    0.885411626093567,
+    0.9073062805012656,
+    0.9190513718010834,
+    0.9141568366759603,
+    0.884868289806757,
+    0.880893870635652
+  ],
+  "cka_mean_over_levels": 0.8986147125857142,
+  "cosine_mean": -0.003328728023916483,
+  "cosine_median": -0.0035462751984596252,
+  "cosine_p10": -0.05841393768787384,
+  "cosine_p90": 0.05164391174912453,
+  "per_video_cka_mean": 0.9608223107849915,
+  "per_video_cka_std": 0.013355055030098652,
+  "weight_cosine_backbone": 0.5405980479394522,
+  "weight_cosine_neck": 0.999810295852566
+}
