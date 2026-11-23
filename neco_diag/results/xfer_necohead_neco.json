@@ -1,0 +1,7 @@
+{
+  "backbone": "neco",
+  "data": "voc",
+  "eval_only": true,
+  "mIoU": 0.8162047266960144,
+  "ce_loss": 0.12130143117542674
+}

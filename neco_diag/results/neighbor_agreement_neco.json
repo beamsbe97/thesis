@@ -1,0 +1,28 @@
+{
+  "backbone": "neco",
+  "ckpt": "/zfsstore/user/s4561341/neco_diag/ckpt/neco_dinov2_vits14_student.ckpt",
+  "n_images": 400,
+  "k": 10,
+  "patch_size": 14,
+  "grid": 32,
+  "patch_label_purity": 0.9819629146158695,
+  "valid_patch_fraction": 0.98673583984375,
+  "within_image": {
+    "knn_same_label": 0.9733377515982778,
+    "vote_acc": 0.9833240864165609,
+    "chance": 0.6562686706334353,
+    "chance_std": 0.17374895191355447,
+    "lift": 0.9224328825339957
+  },
+  "cross_image": {
+    "knn_same_label": 0.9518366666666667,
+    "vote_acc": 0.9725333333333334,
+    "chance": 0.5126273036003113,
+    "lift": 0.9011776127609842
+  },
+  "kmeans": {
+    "nmi": 0.3687997709070393,
+    "ari": 0.048685135591634704,
+    "n": 50000
+  }
+}
