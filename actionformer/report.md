@@ -1,5 +1,7 @@
 # Self-Supervised Pre/Post-Training for Temporal Action Localization with ActionFormer
 
+> ⚠ **Superseded.** This is the earliest write-up and describes the pre-fix SSL pipeline (before 2026-11-22). Its SSL results are invalid; see `paper/main.pdf` and `CLAUDE.md`.
+
 ## 1. Overview
 
 This report documents a set of experiments on the **EPIC-KITCHENS-100 verb** task

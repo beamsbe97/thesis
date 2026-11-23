@@ -183,3 +183,67 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
   - check if SSL loss curve starts lower or higher than normal training (takes more effort just to get to reuglar supervised learning baseline)
   - plot the same graph for NeCo
   - check what head/neck/backbones are actually, and why supervised has 0 head weight change, what is the head? for the specific task? reg/clf head? or what is it?
+
+# 13/11 — answered the "does the supervised loss start lower after SSL?" question
+  - new tool `tools/analyze_loss_start.py`; figure
+    `figs/loss_start_comparison.png`; numbers in `report.md` §3.4.
+  - seed-matched pairs share head init + data order, so the epoch-1 supervised
+    loss isolates the encoder init. Result: SSL init does NOT start lower.
+    Δ(SSL−random) at epoch 1: SlowFast +0.12%/+0.16% (seeds 1/2), VideoMAE
+    spatial +0.19%, spatial-v2 +0.56%, V-JEPA2 −0.20%. 5/6 start *higher*.
+  - V-JEPA2 starts lower but has worse mAP (17.40 vs 17.49) -> a lower start is
+    not evidence of transfer (can be train-set overfitting). So the loss-curve
+    probe is consistent with the CKA result (§6.3) but is a weak, confounded
+    probe on its own.
+  - caveat: batch size 2; single minibatch loss varies 1.97/6.41/2.82 across
+    seeds for the same recipe — only epoch means are usable.
+  - next: for NeCo -> spatial segmentation, see the options discussed
+    (initial-loss probe, frozen/linear head, CKA to seg-trained backbone,
+    gradient cosine, NeCo-neighbour vs GT-label agreement).
+
+# 15/11 — NeCo in its own setting (DINOv2 ViT-S/14 -> PASCAL VOC segmentation)
+  - separate tree on Alice: `/zfsstore/user/s4561341/neco_diag`, official
+    `neco_repo` + released checkpoints; VOC 2012 trainaug (10582) / val (1449).
+  - protocol: frozen backbone, 1x1 conv on patch tokens -> 100x100, SGD 0.01,
+    wd 1e-4, 25 ep, step decay @20, seed 400 for *both* runs (same head init +
+    data order).
+  - **option 2 (linear probe)**: DINOv2 79.65 best (79.34 final) vs NeCo **81.62**
+    (81.24 final) = +1.97 / +1.90 pp. Paper's NeCo ViT-S/14 linear = 81.4, so the
+    pipeline reproduces the published number; the DINOv2 control is our own run.
+  - **batch-size trap**: the first NeCo probe ran at bs 64 (165 steps/epoch) vs
+    DINOv2 at 128 (82 steps). That inflated the epoch-0 gap to −35% train CE and
+    also nudged the final mIoU (81.67). Reran NeCo at bs 128 (paper protocol).
+    Lesson: only quote epoch-0 losses within a matched step count.
+  - **epoch-0 CE (bs 128 both)**: train 0.6103 -> 0.5785 (−5%), val 0.1993 ->
+    0.1793 (−10%), ep0 mIoU 73.87 -> 74.91. So NeCo does start lower, but only
+    modestly; the 2 pp is built over training, not handed out at init. Consistent
+    with §3.4's verdict that the loss-start probe is weak (there the sign was even
+    reversed at +0.1–0.6% while mAP was flat).
+    Not a feature-scale artifact: mean token L2 49.6 vs 52.9 (+7%).
+  - **cross-head transfer**: dinov2 head on neco 71.39, neco head on dinov2 49.86
+    (own: 79.65 / 81.62). Asymmetric -> NeCo is not a rescaling of DINOv2; a head
+    trained on the sharper geometry does not survive the move back.
+  - **option 4 (gradient cosine, 20 iters, bs 8, eval mode)**: DINOv2 −0.002 ± 0.088
+    (noise +0.045), NeCo −0.015 ± 0.073 (noise −0.006); no block exceeds |0.05|.
+    So the SSL gradient is *orthogonal* to the CE gradient for both -> gradient
+    alignment is not the mechanism (null result, useful as a negative control).
+    Norm ratio ‖g_ssl‖/‖g_ce‖ = 0.79 (DINOv2) vs 0.59 (NeCo): NeCo asks for less
+    backbone movement per unit of downstream signal — same "head absorbs it"
+    behaviour as in the ActionFormer encoder (§6.2).
+  - **option 5 (patch kNN vs GT labels, 400 imgs, k=10)**: same-label fraction
+    0.947 -> 0.973 (within), 0.918 -> 0.952 (cross); chance 0.656 / 0.513, so
+    lift 0.846 -> 0.922 and 0.832 -> 0.901. k-means NMI 0.332 -> 0.369,
+    ARI 0.044 -> 0.049. NeCo improves exactly the quantity its objective
+    optimises, at a fixed k.
+  - conclusion for the thesis: NeCo is *not* generically "too far from the
+    downstream objective" — on dense prediction it helps by ~2 pp. The
+    ActionFormer null result is a statement about applying it to a frozen,
+    already-supervised feature encoder for sparse temporal labelling (no patch
+    adjacency prior, aggregation rather than per-element labelling).
+  - files: `neco_diag/{linear_probe,grad_alignment,neighbor_label_agreement,
+    make_figs}.py`, results JSONs in `neco_diag/results/`, figure
+    `neco_diag/figs/neco_diagnostics.png`; write-up `report.md` §7.
+  - caveats: 1 seed per VOC run; option 5 on 400 images; option 4 can only
+    resolve alignment >~0.05.
+  - queue note: SLURM GPU jobs sat PENDING (Priority) for hours; ran on the idle
+    login-node L4 instead (login-node zfs I/O was slow, ~3.7 min/epoch).

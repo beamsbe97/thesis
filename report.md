@@ -1,6 +1,57 @@
 # Self-Supervised Pre/Post-Training for Temporal Action Localization with ActionFormer
 
-*Last updated: 2026-09-25 (seed replicates, frame-rate augmentation, VideoMAE-L SSL runs added). Paths below are relative to `actionformer/`.*
+> ## ⚠ 2026-11-23: this report describes a pipeline with three bugs — superseded
+>
+> Everything in §1–§6 below was produced **before** three problems in the SSL
+> pipeline were found and fixed (2026-11-22). Those SSL numbers and the diagnostics
+> computed on those encoders are **invalid**. The current write-up is
+> **`paper/main.pdf`**; the corrected results and analysis are also summarised in
+> `CLAUDE.md`. This file is kept as a history of the pre-fix experiments only.
+>
+> **The three problems**
+> 1. `NeCoLoss` ranked both views against detached **student** references; the NeCo
+>    paper uses **teacher** references. (Fix: `loss.ref_source: teacher`.)
+> 2. The EMA teacher momentum `0.9995 -> 1`, copied from NeCo's post-training
+>    setting, is far too slow for our 1476-step from-scratch runs: the teacher, which
+>    is the encoder transferred to stage B, moved only 0.08% from its random init.
+>    So pipeline 3 was effectively the baseline from a random init. (Fix: `0.99 -> 1`;
+>    the teacher now moves 4.4%.)
+> 3. Pipeline 2 warm-started from the supervised **raw** weights but was evaluated on
+>    the supervised **EMA** heads, while the baseline is the EMA model. That mismatch
+>    alone costs 0.37 mAP (no-SSL control: 22.70), so most of the reported
+>    post-training drop (23.07 -> 22.55) was not SSL. The joint-fine-tune ablation
+>    (§2.6, §3.2, §5.3) is confounded the same way. (Fix: warm start from EMA.)
+>
+> **Claims below that no longer hold**: pipeline 3 "+0.49 / beats the paper" and its
+> low seed variance (§5.2); the frame-rate augmentation result 24.45 (§5.5); all
+> VideoMAE-L and V-JEPA2 SSL numbers; "head mismatch is not the explanation"
+> (§5.3); "the encoder barely moves / SSL trains only the head" (§6.2) and "forcing
+> the encoder to train more makes it worse" (§6.6); the CKA / weight-cosine /
+> loss-start comparisons (§3.4, §6.3–§6.5). Unaffected: the supervised baselines
+> (incl. the SlowFast seed replicates 23.07 / 22.84 / 24.23), the feature-track
+> comparison (§5.4 baselines), the receptive-field view-identity analysis, and the
+> NeCo-on-VOC control (§7).
+>
+> **Corrected results** (EPIC-100 verb, val, avg mAP):
+>
+> | Run | Avg mAP |
+> |---|---|
+> | P1 SlowFast baseline, 3 seeds | 23.38 ± 0.75 |
+> | P2 post-training (SlowFast), frozen heads | **21.73** (vs 23.07) |
+> | P3 pre-training (SlowFast), 3 seeds | **23.82 ± 0.18** (+0.44, n.s.) |
+> | P1 VideoMAE-L baseline | 29.60 |
+> | P3 VideoMAE-L, temporal / spatial crops | **29.64 / 29.22** |
+>
+> **Corrected diagnosis**: the SSL stage does train the encoder (4–5% weight change,
+> neighbour agreement 0.92–0.96), but from scratch it moves timestep
+> neighbourhoods *away* from verbs (neighbour-label lift 0.31 → 0.26 on SlowFast)
+> and away from kitchens, gives a worse first-epoch supervised loss, and is erased by
+> supervised training; post-training keeps the verb grouping but shifts the
+> features under the frozen heads. Spatial crops and the kitchen probe rule out view
+> identity and scene shortcuts. See `paper/main.pdf` §6.
+
+
+*Last updated: 2026-11-15 (NeCo diagnostics in its own DINOv2 → VOC setting, §7). Paths below are relative to `actionformer/` unless prefixed with `neco_diag/`.*
 
 ## 1. Overview
 
@@ -41,6 +92,12 @@ to test *why* post-training hurts.
    (24.45, +0.80 over pipeline 3 without it), but on a single seed.
 4. **Features dominate**: EPIC-finetuned VideoMAE-L features are +6.2 pp over
    SlowFast -- an order of magnitude more than any SSL effect.
+5. **The null result is setting-specific.** In NeCo's own setting (DINOv2 →
+   VOC semantic segmentation, §7) the same objective gives **+2.0 mIoU** on a
+   frozen-backbone linear probe, a lower epoch-0 loss, and a higher
+   patch-neighbour/label agreement. What fails on ActionFormer is applying NeCo
+   to an encoder over frozen, already-supervised features for a sparse task --
+   not the objective itself.
 
 Experiments were run on the ALICE cluster (Leiden University). The project mirrors the
 official ActionFormer codebase with an added self-supervised training stage.
@@ -149,6 +206,8 @@ includes SSL-stage variance as well as supervised-stage variance.
 
 ## 3. Results
 
+> ⚠ **Pre-fix (before 2026-11-22):** pre-fix SSL numbers; see the header for corrected results.
+
 ### 3.1 Main results (EPIC-100 verb, validation)
 
 | Model | tIoU 0.1 | tIoU 0.2 | tIoU 0.3 | tIoU 0.4 | tIoU 0.5 | Avg mAP |
@@ -228,6 +287,49 @@ same noisy trajectory, same final training loss (~0.35). SSL pretraining does **
 show up as a lower starting loss or faster convergence; whatever it changes shows up
 only in validation mAP and its seed-to-seed spread (§5.2).
 
+**Does the SSL init start lower?** The first epoch is the cleanest test of whether
+the NeCo objective is aligned with the downstream TAL objective. In stage B the
+cls/reg/center heads are randomly initialised in *both* runs and, for a seed-matched
+pair, the head init and the data order are identical -- so any difference in the
+supervised loss over epoch 1 is attributable to the encoder. It is absent:
+
+![Start-of-training loss gap, random vs. SSL init](actionformer/figs/loss_start_comparison.png)
+
+*Top: supervised loss over the first two epochs, random vs. SSL init (seed-matched
+pairs; thin = per-minibatch, thick = 5-point moving average). Bottom: mean epoch-1
+loss difference (SSL − random) as a percentage of the random-init loss, with the
+paired standard error over minibatches. Positive = the SSL-initialised model
+starts **higher**.*
+
+| Track | first minibatch (random / SSL) | epoch-1 mean (random / SSL) | Δ epoch 1 (SSL − random) |
+|---|---|---|---|
+| SlowFast, seed 0 | 1.9725 / 1.9762 | 0.9348 / 0.9377 | +0.003 (+0.31%) |
+| SlowFast, seed 1 | 6.4119 / 6.4043 | 1.2500 / 1.2516 | +0.002 (+0.12%) |
+| SlowFast, seed 2 | 2.8227 / 2.8234 | 1.2886 / 1.2908 | +0.002 (+0.16%) |
+| VideoMAE-L spatial | 0.3534 / 0.3548 | 0.7362 / 0.7376 | +0.001 (+0.19%) |
+| VideoMAE-L spatial v2 | 0.3534 / 0.3549 | 0.7362 / 0.7403 | +0.004 (+0.56%) |
+| V-JEPA2 | 0.3240 / 0.3236 | 0.8216 / 0.8200 | −0.002 (−0.20%) |
+
+Five of six SSL-initialised runs start *slightly higher*, not lower; the largest
+gap is 0.56% (VideoMAE v2, the variant that moved its encoder 12× more than v1 and
+ended with the worst mAP, 28.65). The one run that starts lower, V-JEPA2, has a
+*worse* downstream mAP than its baseline (17.40 vs. 17.49) and sits ~0.5–1% below
+the random-init curve in 19 of 21 epochs (the other two are +0.1% and +0.6%) while
+generalising worse. A lower supervised
+loss at the start is therefore not evidence that the SSL objective transfers: it
+can equally reflect overfitting to the training videos. Either way, the loss curve
+provides **no sign of a representation head-start** for NeCo, which is the
+loss-curve counterpart of the CKA result in §6.3 (the SSL stage-A encoder is about
+as far from the supervised encoder as a random init is).
+
+Caveats: batch size 2 makes individual minibatch losses extremely noisy (0.06–6.4
+within one epoch), so single points are not comparable -- the first logged loss of
+the same recipe is 1.97, 6.41 and 2.82 on three seeds. Only the epoch mean, averaged
+over its 24 minibatches, is stable. Even that is a weak probe: with freshly
+initialised heads, most of the loss is set by the head, so it has limited
+sensitivity to encoder quality. The seed-0 runs predate `--seed` and do not share a
+data order; seeds 1–2 are exactly paired.
+
 ### 3.5 Seed replicates (SlowFast)
 
 | Run | tIoU 0.1 | tIoU 0.2 | tIoU 0.3 | tIoU 0.4 | tIoU 0.5 | Avg mAP |
@@ -283,6 +385,8 @@ Notes on comparability:
   feature track, not as a reproduction.
 
 ## 5. Analysis
+
+> ⚠ **Pre-fix (before 2026-11-22):** pre-fix; conclusions partly invalid, see header.
 
 ### 5.1 SSL post-training does not improve TAL performance
 
@@ -413,6 +517,10 @@ run. It is the obvious candidate for seed replication, and for testing on VideoM
   gives no mean gain; matching across playback rates might.
 - **Feature quality dominates**: VideoMAE-L features give +6.2 pp over SlowFast,
   an order of magnitude more than any SSL effect.
+- **NeCo itself is not the problem.** In its own setting (DINOv2 → VOC
+  segmentation) the objective improves dense prediction by +2.0 pp and lowers
+  the epoch-0 loss by 5–10% (§7). The null result is about applying it to a frozen,
+  already-supervised feature encoder for a sparse task.
 
 **Limitations.** Seed replicates exist only for the SlowFast baseline and pipeline 3
 (n = 3 each); every other row, including the rate-augmented result, is a single
@@ -420,6 +528,8 @@ seed. The SlowFast baseline's seed spread (sd 0.75) means single-seed difference
 below ~1.5 pp should not be interpreted.
 
 ## 6. Encoder-level analysis: why SSL on the ActionFormer encoder does not help
+
+> ⚠ **Pre-fix (before 2026-11-22):** pre-fix encoders; superseded by `paper/main.pdf` §6.
 
 This section documents *why* the NeCo SSL stage does not improve downstream TAL,
 using weight-space and representation-space measurements rather than mAP alone.
@@ -567,7 +677,13 @@ than the augmentation.
 1. **Information is fixed before SSL.** The features are already EPIC-finetuned;
    SSL and the baseline see exactly the same tensors.
 2. **The objective is not task-aligned.** NeCo enforces neighbour-order
-   consistency across augmentations, not action boundaries or verb classes.
+   consistency across augmentations, not action boundaries or verb classes. The
+   start-of-training loss is the direct downstream test of this: an SSL-initialised
+   encoder does not give a lower supervised loss in epoch 1 -- if anything it is
+   0.1-0.6% higher (§3.4). Note the scope: in NeCo's *own* setting the same
+   objective does lower the epoch-0 loss and improves dense prediction
+   (§7), so "not aligned" here means "not aligned with *this* task", not a
+   property of NeCo in general.
 3. **The head absorbs it.** The self-generated EMA target is easy to satisfy
    with the expressive projection head, so the encoder barely moves (§6.2) and
    its representation stays far from supervised (§6.3).
@@ -628,7 +744,208 @@ SSL stage-A encoder vs supervised is **0.49–0.66** (far below). CKA therefore
 answers "is the *information* the same?", while cosine answers "are the *vectors*
 aligned in the same basis?".
 
-## 7. Reproducibility Notes
+## 7. NeCo in its own setting: DINOv2 → semantic segmentation
+
+The ActionFormer experiments apply NeCo to an encoder sitting on top of *frozen,
+already supervised* features — a setting the method was never designed for.
+This section runs the same question in the paper's own setting: NeCo
+post-training of a DINOv2 ViT-S/14 backbone, evaluated by PASCAL VOC 2012
+semantic segmentation. If the NeCo objective were generically "too far from the
+downstream objective", it should fail here too. It does not.
+
+![NeCo diagnostics on VOC](neco_diag/figs/neco_diagnostics.png)
+
+*NeCo vs. DINOv2 under an identical protocol. (a) frozen-backbone linear probe;
+(b) each backbone with its own trained head, and with the other backbone's
+frozen head; (c) cosine between the SSL gradient and the segmentation gradient
+on the backbone, with the CE-vs-CE noise floor measured by perturbing the data
+order; (d) fraction of top-10 patch neighbours sharing the query's GT label.*
+
+| metric | DINOv2 | NeCo |
+|---|---|---|
+| linear probe mIoU (best) | 79.65 | **81.62** |
+| linear probe mIoU (final, ep 25) | 79.34 | **81.24** |
+| epoch-0 train CE | 0.6103 | **0.5785** |
+| epoch-0 val CE | 0.1993 | **0.1793** |
+| gradient cosine (SSL vs. CE) | −0.002 | −0.015 |
+| gradient norm ratio ‖g_ssl‖/‖g_ce‖ | 0.79 | 0.59 |
+| kNN same label, within image | 0.947 | **0.973** |
+| kNN same label, cross image | 0.918 | **0.952** |
+| kNN vote accuracy, cross image | 0.946 | **0.973** |
+| k-means NMI | 0.332 | **0.369** |
+| k-means ARI | 0.044 | 0.049 |
+
+### 7.1 Setup
+
+- **Code and weights**: official `vpariza/NeCo` repository, released
+  `neco_on_dinov2_vit14_{model,teacher}.ckpt` (ViT-S/14, DINOv2-initialised,
+  21M parameters), plus the plain `dinov2_vits14` weights as the control.
+- **Data**: VOC 2012 `trainaug` (10 582 images), val (1 449). Images resized to
+  448×448, patch 14 → 32×32 tokens.
+- **Probe protocol** (as in the paper): backbone frozen; one 1×1 convolution on
+  the patch tokens, bilinearly resized to 100×100; SGD, lr 0.01, momentum 0.9,
+  weight decay 1e-4, batch 128, 25 epochs, step decay ×0.1 at epoch 20; CE with
+  class 255 ignored; mIoU on the 21 VOC classes.
+- **Seed matching**: both runs use seed 400, so the head initialisation *and* the
+  data order are identical. Any epoch-0 loss difference therefore comes from the
+  features alone, exactly as in the ActionFormer stage-B comparison (§3.4).
+- **Protocol check**: our NeCo run lands at 81.62 against the paper's 81.4 for
+  this backbone — within 0.3 pp, so the pipeline reproduces the published
+  number. The DINOv2 control (79.65) is the relevant baseline, not a
+  paper-quoted absolute.
+
+### 7.2 Option 2: linear probe — does the SSL init start lower?
+
+Modestly, and then the gap widens. NeCo reaches **81.62** best mIoU against
+**79.65** for DINOv2 (+1.97 pp; +1.90 pp on the final epoch), and it is ahead
+from the first epoch on (panel a) — this is not a lucky late-epoch spike.
+
+The epoch-0 loss is the sharper test, because there the head is the same random
+1×1 convolution in both runs and the optimizer takes the same number of steps:
+
+- train CE **0.5785 vs 0.6103** (−5%), val CE **0.1793 vs 0.1993** (−10%);
+  epoch-0 mIoU 74.91 vs 73.87.
+
+So the sign is the same as the eventual result — NeCo does start lower — but the
+head start is small compared with the 2 pp it ends up with. That is worth
+stating plainly, because it is a direct caution about the loss-start probe used
+in §3.4: a 5–10% lower first-epoch CE here coexists with a 2 pp mIoU gain, while
+in the ActionFormer runs a 0.1–0.6% *higher* first-epoch loss coexisted with a
+flat mAP. The probe is directionally informative at best; the trajectory and the
+final mIoU carry the result.
+
+> **Batch-size caveat (why the numbers changed).** A first NeCo probe was run at
+> batch 64 instead of the paper's 128, i.e. 165 optimizer steps per epoch instead
+> of 82. Its epoch-0 loss was 0.3965/0.1514 — a 35% lower train CE that looked
+> like a dramatic head start but was mostly twice the optimization. The table
+> and figure use the rerun at batch 128, matched to DINOv2. This is also why the
+> epoch-0 numbers must be read only within a matched protocol.
+
+That the epoch-0 gap is *not* a feature-scale artifact can be checked directly:
+mean patch-token L2 norm is 49.6 (DINOv2) vs 52.9 (NeCo), a 7% difference, far
+too small to explain even the 5–10% CE gap. NeCo's tokens are also more uniformly
+scaled across patches (std 1.70 vs 2.75), which is itself the kind of property a
+linear head exploits.
+
+**Cross-head transfer** (panel b) asks whether the two representations are
+merely differently *scaled* or actually different. Freezing each trained head and
+evaluating it on the other backbone:
+
+| trained head | evaluated on | mIoU | val CE |
+|---|---|---|---|
+| DINOv2 | DINOv2 | 79.65 | 0.1422 |
+| DINOv2 | NeCo | 71.39 | 0.2251 |
+| NeCo | NeCo | 81.62 | 0.1213 |
+| NeCo | DINOv2 | 49.86 | 0.8921 |
+
+Neither head transfers, and the asymmetry is informative: the DINOv2 head keeps
+71.4 on NeCo features, whereas the NeCo head collapses to 49.9 on DINOv2. A head
+trained on the sharper representation is tuned to a feature geometry the original
+DINOv2 backbone does not have, so NeCo is not a mild rescaling of DINOv2 — it
+moves the features somewhere else, and that somewhere else is better for dense
+prediction.
+
+### 7.3 Option 4: gradient alignment — a null result
+
+A different question is whether the *SSL gradient* points in the same direction
+as the *downstream* gradient on the backbone. For 20 random batches we compute
+g_ssl = ∇_backbone L_NeCo (the actual `shared_step` loss, teacher forward,
+student backward, model in `eval()` to remove drop-path noise) and
+g_ce = ∇_backbone L_CE (through the trained probe head, masks downsampled to the
+100×100 prediction grid), then report the cosine over the full backbone
+parameter vector. The noise floor is the cosine between two CE gradients on
+different batches.
+
+| backbone | cos(g_ssl, g_ce) | CE-vs-CE noise floor | ‖g_ssl‖/‖g_ce‖ |
+|---|---|---|---|
+| DINOv2 | −0.002 ± 0.088 | +0.045 ± 0.104 | 0.79 |
+| NeCo | −0.015 ± 0.073 | −0.006 ± 0.127 | 0.59 |
+
+Both cosines are **zero to within the noise floor**: at the level of individual
+backbone parameters, the SSL gradient carries no directional information about
+the segmentation gradient for either model, and no parameter group stands out
+(|cos| ≤ 0.05 for every block, `cls_token`, `pos_embed`, `norm`).
+
+Two things follow. First, this is *not* the mechanism behind NeCo's +2 pp: the
+gain comes from the representation the objective produces (options 2 and 5), not
+from a gradient that conveniently points at the downstream loss. Second, the
+norm ratio is the more interesting number: NeCo's SSL gradient is only **three
+fifths** the size of the CE gradient (0.59 vs 0.79) on the same backbone and data.
+The NeCo objective asks for less backbone movement per unit of downstream signal,
+which is the same "the head absorbs the objective" behaviour measured directly in
+the ActionFormer encoder (§6.2).
+
+### 7.4 Option 5: does the neighbourhood structure agree with GT labels?
+
+Options 2–4 all involve a trained head (as the probe itself, or as the source of
+the downstream gradient). Option 5 removes the head entirely and asks
+whether NeCo's similarity structure is *semantically* right: for every patch in
+400 val images (32×32 grid, 404 167 valid patches), take its 10 nearest
+neighbours by cosine — within the same image and across the whole set — and check
+whether they carry the query patch's GT label.
+
+| | DINOv2 | NeCo | chance |
+|---|---|---|---|
+| same-label fraction, within image | 0.947 | **0.973** | 0.656 |
+| same-label fraction, cross image | 0.918 | **0.952** | 0.513 |
+| majority-vote accuracy, cross image | 0.946 | **0.973** | 0.513 |
+| lift over chance, within | 0.846 | **0.922** | — |
+| lift over chance, cross | 0.832 | **0.901** | — |
+| k-means NMI / ARI | 0.332 / 0.044 | **0.369** / 0.049 | — |
+
+The absolute numbers are high for both models because VOC patches are dominated
+by a few large classes and neighbouring patches are spatially correlated; that is
+why chance (the label prior over the same patch population) is reported alongside,
+and why the useful quantity is the *lift*. NeCo improves the lift over chance by
++0.08 within image and +0.07 across images, and it does so at a *fixed* k, so the
+comparison is not bought by a different neighbourhood size. The same pattern
+appears without any labels at all: k-means on NeCo features aligns better with
+the 21 VOC classes (NMI 0.332 → 0.369).
+
+This is the most direct evidence against the "too far from the downstream
+objective" hypothesis in this setting. NeCo's objective is neighbour-order
+consistency; the quantity it improves is precisely neighbour-label consistency.
+The objective and the downstream task share their notion of "what should be
+close to what".
+
+### 7.5 What this means for the ActionFormer result
+
+1. **The objective is not generically misaligned.** In the setting NeCo was
+   designed for, it gives +2 pp linear-probe mIoU, a 5–10% lower epoch-0 CE loss
+   in both train and val, a +0.07–0.08 lift in patch-neighbour label agreement,
+   and a +0.04 NMI — all in the same direction, from three methodologically
+   independent measurements. The "far from downstream" explanation cannot be a
+   property of the objective as such.
+2. **Gradient alignment is not the mechanism anywhere.** It is null for DINOv2
+   *and* for NeCo (§7.3), so it neither explains NeCo's success here nor its
+   failure on ActionFormer. What separates the two settings is the
+   representation, not the gradient direction.
+3. **What is different in the ActionFormer setting is the object being
+   trained.** NeCo's neighbours are *spatial patches of an image*: adjacency is a
+   meaningful prior, and the downstream task (per-pixel labelling) is exactly a
+   patch-level decision. In ActionFormer the SSL views are *time crops of a
+   feature sequence*, the "patches" are already-supervised 1024-d EPIC features,
+   and the downstream task is sparse — one verb label and two boundaries per
+   window over 100+ classes. There is no patch-adjacency prior to exploit, and
+   the encoder's job is temporal aggregation, not per-element labelling.
+4. **Consistent with §6 rather than contradicting it.** Section 6 concluded that
+   what matters is the representation, and that the ActionFormer encoder cannot
+   reach the representation because the features are frozen upstream. Section 7
+   shows that when NeCo *can* change the representation, it improves dense
+   prediction. The two results are the same claim seen from both sides.
+5. **Scope of the null result.** The ActionFormer finding should therefore be
+   read as "NeCo on a frozen, already-supervised feature encoder for sparse
+   temporal labelling does not help" — a statement about that pipeline — not as
+   evidence that the NeCo objective is weak.
+
+**Caveats.** One seed per run on VOC (the probe curve is stable across epochs,
+but the ±2 pp is not a seed-replicated estimate); 400 images for option 5;
+option 4 averages 20 batches, so it can only detect alignment larger than ~0.05,
+which is enough to rule out the "the SSL gradient points at the task" story but
+not to resolve a small positive alignment. Batch size matters for the epoch-0
+numbers (see the caveat in §7.2), so only the matched-protocol pair is quoted.
+
+## 8. Reproducibility Notes
 
 - All results: EPIC-100 **verb** task, validation split.
 - **Supervised baselines**: `train_verb_4621944.out` (V-JEPA2, 17.49) and
@@ -673,3 +990,33 @@ aligned in the same basis?".
 - All encoder inits verified at load: 207 encoder keys matched, 0 unexpected.
 - **Figures**: `figs/ssl_pretrain_loss.{png,jpg}`,
   `figs/supervised_loss_comparison.{png,jpg}`, produced by `tools/plot_loss_curves.py`.
+
+**NeCo / VOC experiment (§7).** Runs on the ALICE cluster in a separate tree
+(`/zfsstore/user/s4561341/neco_diag`), conda env `neco_diag` (torch 2.5.1+cu124,
+timm, pytorch-lightning, diffsort, faiss), with the official repository checked
+out at `/zfsstore/user/s4561341/neco_repo`.
+
+- **Data**: VOC 2012 + `SegmentationClassAug`; splits `sets/trainaug.txt`
+  (10 582) and `sets/val.txt` (1 449).
+- **Checkpoints**: `ckpt/dinov2_vits14_pretrain.pth`,
+  `ckpt/neco_dinov2_vits14_student.ckpt`, `ckpt/neco_dinov2_vits14_teacher.ckpt`
+  (the released NeCo checkpoints are plain dicts: backbone + `projection_head.*`).
+- **Option 2** — `neco_diag/linear_probe.py`, seed 400, 25 epochs, batch 128
+  (both backbones; a first NeCo run at batch 64 is discarded, §7.2),
+  `--out results/probe_{dinov2,neco}_voc.json`; trained heads saved as
+  `results/probe_*_voc_head.pt`; cross-head transfer via `--eval-only --head ...`
+  → `results/xfer_{trainer}head_{eval}.json`.
+- **Option 4** — `neco_diag/grad_alignment.py`, 20 iterations of batch 8, models
+  in `eval()`, teacher forward for the NeCo loss, `on_train_epoch_start()` called
+  to build the `DiffSortNet` → `results/grad_align_{dinov2,neco}.json`.
+- **Option 5** — `neco_diag/neighbor_label_agreement.py`, 400 val images, 32×32
+  patch grid, k = 10, k-means with 21 clusters →
+  `results/neighbor_agreement_{dinov2,neco}.json`.
+- **Figure and table** — `neco_diag/make_figs.py` builds
+  `neco_diag/figs/neco_diagnostics.png` and prints the summary table from those
+  JSONs. Batch scripts for the same jobs are in `neco_diag/scripts/*.slurm`.
+- Protocol notes: masks are nearest-downsampled to the 100×100 prediction grid
+  before the CE (the paper compares at 100×100); mIoU is computed from a
+  confusion matrix and averaged over the classes present in the val set (all 21
+  VOC classes occur, so this is the usual 21-class mIoU, with no Hungarian
+  matching — the head is supervised).
