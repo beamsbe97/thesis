@@ -31,6 +31,6 @@ echo "NeCo SSL post-training on VideoMAE-L, warm-started from the supervised bas
 conda init
 conda activate thesis_env
 python -u ./train_ssl.py ./configs/ssl_epic_videomae_verb.yaml --output neco_warm \
-    --init-encoder ./ckpt/epic_videomae_verb_reproduce/epoch_021.pth.tar
+    --init-encoder ./ckpt/epic_videomae_verb_reproduce/epoch_021.pth.tar --init-encoder-raw
 
 echo "FINISHED ssl_neco_videomae_warm"

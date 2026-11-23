@@ -353,7 +353,10 @@ def main(args):
     # warm-start the encoder from a supervised (or previous SSL) checkpoint;
     # auto-discover from ckpt/ if --init-encoder is not provided
     args.init_encoder = getattr(args, 'init_encoder', '')
-    if not args.init_encoder:
+    if args.from_scratch:
+        assert not args.init_encoder, "--from-scratch and --init-encoder conflict"
+        print(">> from scratch: random encoder init (auto-discovery disabled)")
+    elif not args.init_encoder:
         sup_ckpt = _find_supervised_ckpt(args.ckpt_dir, cfg_filename)
         if sup_ckpt is not None:
             args.init_encoder = sup_ckpt
@@ -362,8 +365,14 @@ def main(args):
 
     model = make_meta_arch('PtTransformerSSL', **cfg['model'], ssl_cfg=ssl_cfg)
     if args.init_encoder:
+        # warm-start from the supervised EMA weights by default: that is the model
+        # that is evaluated / reported (and whose heads eval_ssl.py splices the
+        # SSL encoder onto). Before 2026-11-22 the raw `state_dict` was loaded
+        # (--init-encoder-raw reproduces that), which differs from the EMA
+        # encoder by ~1.6-1.9% and confounded the post-training comparison.
         model = load_init_encoder(
-            model, args.init_encoder, _master_device(cfg))
+            model, args.init_encoder, _master_device(cfg),
+            prefer_ema=not args.init_encoder_raw)
 
     # build the optimizer BEFORE wrapping with DataParallel so that
     # head-vs-encoder parameter groups can be separated cleanly
@@ -501,6 +510,12 @@ if __name__ == '__main__':
     parser.add_argument('--init-encoder', default='', type=str, metavar='PATH',
                         help='warm-start the SSL encoder from a supervised '
                              'ActionFormer ckpt (default: from random init)')
+    parser.add_argument('--init-encoder-raw', action='store_true',
+                        help='warm-start from the checkpoint\'s raw state_dict '
+                             'instead of its EMA weights (legacy behaviour)')
+    parser.add_argument('--from-scratch', action='store_true',
+                        help='random encoder init; disables auto-discovery of '
+                             'a supervised checkpoint')
     parser.add_argument('--ssl-method', default=None,
                         choices=['neco', 'dino', 'byol', 'masked'],
                         help='self-supervised method; overrides config '

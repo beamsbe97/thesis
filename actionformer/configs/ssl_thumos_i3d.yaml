@@ -40,6 +40,7 @@ ssl: {
     tau_rank: 0.1,       # soft-rank temperature
     tau_perm: 0.1,       # soft-permutation temperature
     top_k: 0,            # 0 = use all ranks (nearest-neighbor order)
+    ref_source: student,  # legacy (pre-2026-11-22); NeCo paper = teacher
   },
   # EMA teacher schedule (cosine)
   ema: {

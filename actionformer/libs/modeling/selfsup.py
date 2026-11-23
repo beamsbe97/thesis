@@ -149,15 +149,28 @@ def soft_sort_perm(dist, tau_rank=0.1, tau_perm=0.1, top_k=0):
 class NeCoLoss(nn.Module):
     """
     NeCo: patch (neighbor) consistency across student and EMA teacher views.
-    References are sampled from the *other* videos of the batch (student
-    features, stop-gradient), mirroring NeCo's reference batch.
+    References are sampled from the *other* videos of the batch (stop-gradient),
+    mirroring NeCo's reference batch.
+
+    ref_source:
+      'teacher' (default) -- references are TEACHER features, as in the NeCo
+          paper (Sec. 3: "all batch images are fed through the teacher network
+          to obtain the batch features"); student and teacher anchors are both
+          ranked against the same teacher-space references.
+      'student' -- legacy behaviour of all runs before 2026-11-22: references
+          are detached STUDENT features, so the teacher's anchors are ranked
+          against features of a different network. Kept only to reproduce the
+          old numbers.
     """
-    def __init__(self, ref_fraction=0.5, tau_rank=0.1, tau_perm=0.1, top_k=0):
+    def __init__(self, ref_fraction=0.5, tau_rank=0.1, tau_perm=0.1, top_k=0,
+                 ref_source='teacher'):
         super().__init__()
+        assert ref_source in ('teacher', 'student'), ref_source
         self.ref_fraction = ref_fraction
         self.tau_rank = tau_rank
         self.tau_perm = tau_perm
         self.top_k = top_k
+        self.ref_source = ref_source
 
     def forward(self, f_s, f_t, masks=None):
         # f_s, f_t: (B, N, D) L2-normalized anchor features (student / teacher)
@@ -169,6 +182,7 @@ class NeCoLoss(nn.Module):
             masks = f_s.new_ones(B, N, dtype=torch.bool)
 
         n_ref_target = max(1, int(round(N * self.ref_fraction)))
+        f_ref = f_t if self.ref_source == 'teacher' else f_s
 
         total_loss = f_s.new_zeros(())
         total_acc = f_s.new_zeros(())
@@ -180,13 +194,13 @@ class NeCoLoss(nn.Module):
             if a_s.size(0) == 0:
                 continue
 
-            # reference pool = valid bins of the OTHER videos (student, no grad)
+            # reference pool = valid bins of the OTHER videos (no grad)
             refs = []
             for j in range(B):
                 if j == b:
                     continue
                 vj = masks[j]
-                fj = f_s[j][vj]              # (Nj, D)
+                fj = f_ref[j][vj]            # (Nj, D)
                 mj = min(n_ref_target, fj.size(0))
                 if mj == 0:
                     continue
@@ -239,6 +253,7 @@ def make_ssl_loss(method, ssl_cfg=None):
             tau_rank=loss_cfg.get('tau_rank', 0.1),
             tau_perm=loss_cfg.get('tau_perm', 0.1),
             top_k=loss_cfg.get('top_k', 0),
+            ref_source=loss_cfg.get('ref_source', 'teacher'),
         )
     elif method in ('dino', 'byol', 'masked'):
         raise NotImplementedError(

@@ -27,6 +27,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "running train_ssl.py (NeCo SSL post-training, SlowFast, WARM-STARTED)"
 conda init
 conda activate thesis_env
-python ./train_ssl.py ./configs/ssl_epic_slowfast_verb.yaml --output neco_warm --ckpt-dir ./ckpt
+python ./train_ssl.py ./configs/ssl_epic_slowfast_verb.yaml --output neco_warm --ckpt-dir ./ckpt --init-encoder-raw
 
 echo "FINISHED self-supervised training (SlowFast warm)"

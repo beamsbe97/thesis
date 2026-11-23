@@ -27,6 +27,6 @@ echo "[$SHELL] CWD: "$CWD
 echo "running train_ssl.py (NeCo-style SSL post-training, V-JEPA2 features)"
 conda init
 conda activate thesis_env
-python ./train_ssl.py ./configs/ssl_epic_vjepa2_verb.yaml --output neco_vjepa2 --ckpt-dir ./ckpt
+python ./train_ssl.py ./configs/ssl_epic_vjepa2_verb.yaml --output neco_vjepa2 --ckpt-dir ./ckpt --init-encoder-raw
 
 echo "FINISHED self-supervised training (V-JEPA2)"

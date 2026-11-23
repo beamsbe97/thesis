@@ -1,0 +1,27 @@
+{
+ "config": "configs/epic_videomae_verb.yaml",
+ "k": 10,
+ "excl": 32,
+ "n_kitchens": 32,
+ "ssl_spatial": {
+  "cross": {
+   "knn_same_label": 0.4191900085449219,
+   "chance": 0.0608840446472168,
+   "lift": 0.3815353810734754,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.28848999633789063,
+   "chance": 0.02855105538368225,
+   "lift": 0.2675785921584109
+  },
+  "within": {
+   "knn_same_label": 0.5415787140834469,
+   "chance": 0.13900683637104472,
+   "lift": 0.4675668689581959,
+   "n_query": 19991
+  },
+  "spec": "./ckpt_ssl/ssl_epic_videomae_verb_spatial_fixed_v2_s0/epoch_020.pth.tar",
+  "fg_fraction": 0.6915616989135742
+ }
+}

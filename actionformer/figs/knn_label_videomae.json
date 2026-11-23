@@ -1,0 +1,111 @@
+{
+ "config": "configs/epic_videomae_verb.yaml",
+ "k": 10,
+ "excl": 32,
+ "n_kitchens": 32,
+ "input": {
+  "cross": {
+   "knn_same_label": 0.43402000427246096,
+   "chance": 0.0608840446472168,
+   "lift": 0.3973268236988625,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.48145500183105466,
+   "chance": 0.02855105538368225,
+   "lift": 0.4662148731102393
+  },
+  "within": {
+   "knn_same_label": 0.5458756596107897,
+   "chance": 0.13900683637104472,
+   "lift": 0.4725575537961936,
+   "n_query": 19991
+  },
+  "spec": "input",
+  "fg_fraction": 0.6915616989135742
+ },
+ "random": {
+  "cross": {
+   "knn_same_label": 0.44118500061035154,
+   "chance": 0.0608840446472168,
+   "lift": 0.4049563355786804,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.42740999908447264,
+   "chance": 0.02855105538368225,
+   "lift": 0.41058147822510965
+  },
+  "within": {
+   "knn_same_label": 0.5541743830500092,
+   "chance": 0.13900683637104472,
+   "lift": 0.48219610122001016,
+   "n_query": 19991
+  },
+  "spec": "random",
+  "fg_fraction": 0.6915616989135742
+ },
+ "ssl": {
+  "cross": {
+   "knn_same_label": 0.4208450004577637,
+   "chance": 0.0608840446472168,
+   "lift": 0.38329766815145405,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.2872000030517578,
+   "chance": 0.02855105538368225,
+   "lift": 0.2662506857426576
+  },
+  "within": {
+   "knn_same_label": 0.5336501523341753,
+   "chance": 0.13900683637104472,
+   "lift": 0.4583582456099524,
+   "n_query": 19991
+  },
+  "spec": "./ckpt_ssl/ssl_epic_videomae_verb_fixed_v2_s0/epoch_020.pth.tar",
+  "fg_fraction": 0.6915616989135742
+ },
+ "supervised": {
+  "cross": {
+   "knn_same_label": 0.44924500427246095,
+   "chance": 0.0608840446472168,
+   "lift": 0.41353887921045335,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.3734250045776367,
+   "chance": 0.02855105538368225,
+   "lift": 0.35500985523244916
+  },
+  "within": {
+   "knn_same_label": 0.5569656400311781,
+   "chance": 0.13900683637104472,
+   "lift": 0.48543800498775225,
+   "n_query": 19991
+  },
+  "spec": "./ckpt/epic_videomae_verb_reproduce/epoch_021.pth.tar",
+  "fg_fraction": 0.6915616989135742
+ },
+ "ssl_then_sup": {
+  "cross": {
+   "knn_same_label": 0.45026500854492185,
+   "chance": 0.0608840446472168,
+   "lift": 0.41462501161683735,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.3506900062561035,
+   "chance": 0.02855105538368225,
+   "lift": 0.331606671310609
+  },
+  "within": {
+   "knn_same_label": 0.5563853618161376,
+   "chance": 0.13900683637104472,
+   "lift": 0.4847640411985455,
+   "n_query": 19991
+  },
+  "spec": "./ckpt/epic_videomae_verb_from_ssl_fixed_v2_s0/epoch_021.pth.tar",
+  "fg_fraction": 0.6915616989135742
+ }
+}

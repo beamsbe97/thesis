@@ -1,0 +1,27 @@
+{
+ "config": "configs/epic_slowfast_verb.yaml",
+ "k": 10,
+ "excl": 16,
+ "n_kitchens": 32,
+ "post_trained": {
+  "cross": {
+   "knn_same_label": 0.4137000030517578,
+   "chance": 0.06158510036468506,
+   "lift": 0.3752230520038748,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.32542500915527345,
+   "chance": 0.028601255655288697,
+   "lift": 0.3055632460182115
+  },
+  "within": {
+   "knn_same_label": 0.5075806916222323,
+   "chance": 0.14175118910899484,
+   "lift": 0.42625110325925825,
+   "n_query": 19985
+  },
+  "spec": "./ckpt_ssl/ssl_epic_slowfast_verb_fixed_warm/epoch_012.pth.tar",
+  "fg_fraction": 0.6921781897544861
+ }
+}

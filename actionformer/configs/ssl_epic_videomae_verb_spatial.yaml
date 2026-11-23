@@ -48,6 +48,7 @@ ssl: {
     tau_rank: 0.1,
     tau_perm: 0.1,
     top_k: 0,
+    ref_source: student,  # legacy (pre-2026-11-22); NeCo paper = teacher
   },
   # EMA teacher schedule (cosine)
   ema: {
