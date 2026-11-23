@@ -1,0 +1,28 @@
+{
+  "backbone": "dinov2",
+  "ckpt": "/zfsstore/user/s4561341/neco_diag/ckpt/dinov2_vits14_pretrain.pth",
+  "n_images": 400,
+  "k": 10,
+  "patch_size": 14,
+  "grid": 32,
+  "patch_label_purity": 0.9819629146158695,
+  "valid_patch_fraction": 0.98673583984375,
+  "within_image": {
+    "knn_same_label": 0.947186917663297,
+    "vote_acc": 0.9627864230215257,
+    "chance": 0.6562686706334353,
+    "chance_std": 0.17374895191355447,
+    "lift": 0.8463535970549205
+  },
+  "cross_image": {
+    "knn_same_label": 0.9178866666666666,
+    "vote_acc": 0.9455,
+    "chance": 0.5126273036003113,
+    "lift": 0.8315183966194257
+  },
+  "kmeans": {
+    "nmi": 0.33182479383024566,
+    "ari": 0.04410912180810986,
+    "n": 50000
+  }
+}

@@ -1,0 +1,80 @@
+[
+  {
+    "label": "SlowFast",
+    "first_random": 1.9725358486175537,
+    "first_ssl": 1.9762492179870605,
+    "first_diff": 0.003713369369506836,
+    "first_epoch_random": 0.9348111307869355,
+    "first_epoch_ssl": 0.9376855579515299,
+    "first_epoch_diff": 0.0028744271645944064,
+    "paired_epochs1_2": -0.10457532216484348,
+    "paired_epochs1_2_se": 0.057899645618039064,
+    "paired_whole_run": -0.026635717537756714,
+    "paired_whole_run_se": 0.020942844188593802
+  },
+  {
+    "label": "VideoMAE-L temporal",
+    "first_random": 0.35336142778396606,
+    "first_ssl": 0.3554706573486328,
+    "first_diff": 0.002109229564666748,
+    "first_epoch_random": 0.7362211458384991,
+    "first_epoch_ssl": 0.7375978113462528,
+    "first_epoch_diff": 0.001376665507753727,
+    "paired_epochs1_2": 0.0006954330019652843,
+    "paired_epochs1_2_se": 0.00040020143515432624,
+    "paired_whole_run": -0.0006505948905315665,
+    "paired_whole_run_se": 0.0002845455895443579
+  },
+  {
+    "label": "VideoMAE-L spatial",
+    "first_random": 0.35336142778396606,
+    "first_ssl": 0.3547709286212921,
+    "first_diff": 0.0014095008373260498,
+    "first_epoch_random": 0.7362211458384991,
+    "first_epoch_ssl": 0.7375892518709103,
+    "first_epoch_diff": 0.0013681060324112204,
+    "paired_epochs1_2": 0.0007575548564394315,
+    "paired_epochs1_2_se": 0.0003217945217726121,
+    "paired_whole_run": 0.0005037453106885391,
+    "paired_whole_run_se": 0.00033490534455080654
+  },
+  {
+    "label": "VideoMAE-L sp+temporal",
+    "first_random": 0.35336142778396606,
+    "first_ssl": 0.3545975089073181,
+    "first_diff": 0.0012360811233520508,
+    "first_epoch_random": 0.7362211458384991,
+    "first_epoch_ssl": 0.7371188209702572,
+    "first_epoch_diff": 0.0008976751317580911,
+    "paired_epochs1_2": 0.00022288349767525992,
+    "paired_epochs1_2_se": 0.0003777118424203272,
+    "paired_whole_run": -8.583711534147225e-05,
+    "paired_whole_run_se": 0.0003346444321173207
+  },
+  {
+    "label": "VideoMAE-L spatial v2",
+    "first_random": 0.35336142778396606,
+    "first_ssl": 0.35492461919784546,
+    "first_diff": 0.0015631914138793945,
+    "first_epoch_random": 0.7362211458384991,
+    "first_epoch_ssl": 0.7403489972154299,
+    "first_epoch_diff": 0.004127851376930836,
+    "paired_epochs1_2": 0.002815128304064274,
+    "paired_epochs1_2_se": 0.0014522944606355983,
+    "paired_whole_run": 0.0011706289184826707,
+    "paired_whole_run_se": 0.0003886726431738743
+  },
+  {
+    "label": "V-JEPA2",
+    "first_random": 0.32646363973617554,
+    "first_ssl": 0.32363301515579224,
+    "first_diff": -0.0028306245803833008,
+    "first_epoch_random": 0.8035061914059851,
+    "first_epoch_ssl": 0.8199951139589151,
+    "first_epoch_diff": 0.016488922552929997,
+    "paired_epochs1_2": 0.000427943654358387,
+    "paired_epochs1_2_se": 0.000445248983183582,
+    "paired_whole_run": 0.0005787447730581912,
+    "paired_whole_run_se": 0.00033832518819079633
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "backbone": "dinov2",
+  "data": "voc",
+  "eval_only": true,
+  "mIoU": 0.4986282289028168,
+  "ce_loss": 0.8921008087010776
+}

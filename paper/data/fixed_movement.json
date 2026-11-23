@@ -1,0 +1,31 @@
+{
+ "_note": "relative L2 change of backbone weights, ||W - W_ref|| / ||W_ref||; measured with actionformer/tools/ssl_teacher_movement.py (EMA/teacher = weights transferred). P2 is measured from the supervised EMA weights it starts from; all others from the seeded random init.",
+ "supervised (SlowFast, 21 ep)": {
+  "student": 0.23777751624584198,
+  "ema": 0.22607168555259705
+ },
+ "P3 SSL, SlowFast": {
+  "student": 0.0453864187002182,
+  "ema": 0.044264379888772964,
+  "head_ema": 0.08486784994602203
+ },
+ "P3 SSL, VideoMAE-L": {
+  "student": 0.0494115985929966,
+  "ema": 0.04762886092066765,
+  "head_ema": 0.09238830953836441
+ },
+ "P3 SSL, post-training recipe (SlowFast)": {
+  "student": 0.004645532928407192,
+  "ema": 0.0042770071886479855,
+  "head_ema": 0.10949143767356873
+ },
+ "P2 SSL post-training (SlowFast)": {
+  "student": 0.0097,
+  "ema": 0.0087
+ },
+ "P3 SSL, VideoMAE-L spatial crops": {
+  "student": 0.04595373943448067,
+  "ema": 0.04484223201870918,
+  "head_ema": 0.09178348630666733
+ }
+}

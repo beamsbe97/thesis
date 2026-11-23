@@ -1,0 +1,111 @@
+{
+ "config": "configs/epic_slowfast_verb.yaml",
+ "k": 10,
+ "excl": 16,
+ "n_kitchens": 32,
+ "input": {
+  "cross": {
+   "knn_same_label": 0.3561950042724609,
+   "chance": 0.06158510036468506,
+   "lift": 0.3139441882500657,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.521745002746582,
+   "chance": 0.028601255655288697,
+   "lift": 0.5076635624271467
+  },
+  "within": {
+   "knn_same_label": 0.47756317573873763,
+   "chance": 0.14175118910899484,
+   "lift": 0.3912757959793897,
+   "n_query": 19985
+  },
+  "spec": "input",
+  "fg_fraction": 0.6921781897544861
+ },
+ "random": {
+  "cross": {
+   "knn_same_label": 0.3538500015258789,
+   "chance": 0.06158510036468506,
+   "lift": 0.3114452906435877,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.49863500061035154,
+   "chance": 0.028601255655288697,
+   "lift": 0.48387312387575654
+  },
+  "within": {
+   "knn_same_label": 0.47999999938919036,
+   "chance": 0.14175118910899484,
+   "lift": 0.3941150934179995,
+   "n_query": 19985
+  },
+  "spec": "random",
+  "fg_fraction": 0.6921781897544861
+ },
+ "ssl": {
+  "cross": {
+   "knn_same_label": 0.3062800033569336,
+   "chance": 0.06158510036468506,
+   "lift": 0.26075342909340143,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.314195002746582,
+   "chance": 0.028601255655288697,
+   "lift": 0.294002590340952
+  },
+  "within": {
+   "knn_same_label": 0.43396047707167096,
+   "chance": 0.14175118910899484,
+   "lift": 0.340471532560953,
+   "n_query": 19985
+  },
+  "spec": "./ckpt_ssl/ssl_epic_slowfast_verb_fixed_v2_s0/epoch_020.pth.tar",
+  "fg_fraction": 0.6921781897544861
+ },
+ "supervised": {
+  "cross": {
+   "knn_same_label": 0.4139050117492676,
+   "chance": 0.06158510036468506,
+   "lift": 0.37544151475163107,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.34066500396728516,
+   "chance": 0.028601255655288697,
+   "lift": 0.32125195768346315
+  },
+  "within": {
+   "knn_same_label": 0.5084913752453012,
+   "chance": 0.14175118910899484,
+   "lift": 0.4273121983770289,
+   "n_query": 19985
+  },
+  "spec": "./ckpt/epic_slowfast_verb_reproduce/epoch_021.pth.tar",
+  "fg_fraction": 0.6921781897544861
+ },
+ "ssl_then_sup": {
+  "cross": {
+   "knn_same_label": 0.40853500671386717,
+   "chance": 0.06158510036468506,
+   "lift": 0.36971909385071905,
+   "n_query": 20000
+  },
+  "cross_kitchen": {
+   "knn_same_kitchen": 0.3203500030517578,
+   "chance": 0.028601255655288697,
+   "lift": 0.3003388146165226
+  },
+  "within": {
+   "knn_same_label": 0.5081711292624742,
+   "chance": 0.14175118910899484,
+   "lift": 0.42693905951710487,
+   "n_query": 19985
+  },
+  "spec": "./ckpt/epic_slowfast_verb_from_ssl_fixed_v2_s0/epoch_021.pth.tar",
+  "fg_fraction": 0.6921781897544861
+ }
+}
