@@ -124,6 +124,17 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
 - found pre-extracted EPIC-finetuned VideoMAE-L features (OpenTAD), verb + noun sets, 1024-d, stride 8
     - OpenTAD's ActionFormer SlowFast verb = 24.93 avg mAP (> our 23.07)
 
+# 25/9
+- seeds (SlowFast, n=3): baseline 23.38 +- 0.75 (22.84-24.23), pipeline 3 23.65 +- 0.08
+    - +0.27, not significant -> the +0.49 "beats paper" was baseline seed noise
+    - but pipeline 3 is MUCH more stable across seeds (range 0.16 vs 1.39)
+- VideoMAE-L (OpenTAD, EPIC-ft): baseline 29.60, post-train 29.24, pretrain 29.38
+    - post-training hurts on both tracks now; pretraining no gain
+- frame-rate aug (feature-level, per-view rate log-U[0.5,2]) + pipeline 3: 24.45 (1 seed!)
+    - +0.8 over pipeline 3 without it; first SSL variant above the baseline distribution
+    - next: replicate with seeds, then try on VideoMAE
+    - (synced from ALICE 2026-11-23; these SSL numbers are pre-fix, see 22-23/11)
+
 
 
 - consider saving checkpoints at earlier epochs, since downstream task can be similar to pretraining
@@ -247,3 +258,17 @@ Below papers use VideoMAE to extract features and ActionFormer as detection head
     resolve alignment >~0.05.
   - queue note: SLURM GPU jobs sat PENDING (Priority) for hours; ran on the idle
     login-node L4 instead (login-node zfs I/O was slow, ~3.7 min/epoch).
+
+# 22-23/11
+- found 3 problems in the SSL pipeline (details: CLAUDE.md / report.md header):
+  NeCo references from the student instead of the teacher; EMA momentum 0.9995 left
+  the from-scratch teacher (= transferred encoder) at its init (moved 0.08%); P2
+  warm-started from raw weights but was evaluated on EMA heads (cost 0.37 alone).
+  -> all SSL results before 22/11 are invalid. Fixed + reran (configs *_fixed*).
+- corrected: P2 21.73 (vs 23.07); P3 SlowFast 23.82 +- 0.18 (3 seeds) vs 23.38 +- 0.75
+  -> +0.44 n.s.; P3 VideoMAE 29.64 (temporal) / 29.22 (spatial) vs 29.60.
+- why: SSL does train the encoder (4-5%) but moves timestep neighbourhoods AWAY from
+  verbs (kNN verb lift .31 -> .26) and away from kitchens; worse first-epoch loss;
+  erased by supervised training. spatial crops give the same drop -> not the views;
+  kitchen probe -> not a scene shortcut. VOC control: same probes, opposite sign.
+- paper rewritten from corrected results only (paper/main.pdf, 11 pp).
