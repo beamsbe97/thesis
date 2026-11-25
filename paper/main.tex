@@ -437,9 +437,11 @@ optimisation or generalisation.
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.84\linewidth]{figs/fig_movement.pdf}
-\caption{\textbf{(a)} Change of the transferred backbone weights relative to their
-starting point (log scale). P3 stage A moves the encoder by 4--5\%, a fifth of what full
-supervised training does. P2 moves the supervised encoder by 0.87\%. With NeCo's
+\caption{\textbf{(a)} Change of the backbone weights relative to their starting point
+(log scale). Supervised training moves the encoder by 23--24\%, whether it starts from a
+random initialisation (P1) or from the SSL weights (P3 stage B, mean of three SlowFast
+seeds). The SSL stage (P3 stage A) moves it by 4--5\%, about a fifth of that. P2 moves the
+supervised encoder by 0.87\%. With NeCo's
 post-training recipe, a from-scratch stage A moves it by only 0.43\%. \textbf{(b)}
 Head-start probe: first-epoch supervised loss of SSL-initialised minus randomly
 initialised runs with identical head initialisation and data order. In TAL the
@@ -496,11 +498,14 @@ The supervised loss confirms this from the downstream side. In seed-matched pair
 SSL-initialised model starts supervised training with a \emph{higher} loss than the
 randomly initialised one: $+4.0\%$ and $+4.7\%$ over the first epoch on SlowFast (seeds 1,
 2), and $+1.4\%$ on VideoMAE-L (\cref{fig:movement}b). Once supervised training starts,
-the SSL changes disappear. The SSL-initialised encoder ends with the same verb-label lift
-as the randomly initialised one (0.37 vs.\ 0.38 across videos, 0.43 vs.\ 0.43 within;
-VideoMAE-L 0.42 vs.\ 0.41), and the two training curves coincide from epoch 10 on
-(\cref{fig:trajectories}). The supervised schedule moves the encoder five times further
-than SSL did, so it overwrites what SSL did instead of building on it. He et
+it moves the encoder 23--24\% away from the SSL weights in every P3 run (SlowFast seeds:
+23.4\%, 23.5\%, 23.8\%; VideoMAE-L: 23.3\%, 23.4\%). That is as far as it moves a random
+initialisation (22.6\%) and about five times further than the SSL stage moved the encoder
+(\cref{fig:movement}a). After supervised training, no measurable trace of the SSL stage
+remains: the drop in verb-label lift it caused is gone (0.37 vs.\ 0.38 for the randomly
+initialised encoder across videos, 0.43 vs.\ 0.43 within; VideoMAE-L 0.42 vs.\ 0.41;
+\cref{fig:knn}), and the two training curves coincide from epoch 10 on
+(\cref{fig:trajectories}). He et
 al.~\cite{he2019rethinking} observed the same with full schedules for ImageNet
 pre-training, but here not even the convergence-speed benefit remains, because the SSL
 starting point is slightly worse.
@@ -635,8 +640,9 @@ downstream metric & $+2.0$ mIoU & $+0.44$\pp{} (n.s.) / $+0.04$\pp{} \\
 objective and moves the encoder by a fifth of what supervised training does. What it
 learns from scratch, however, is a neighbourhood structure that is \emph{less} aligned with
 verbs than the one the encoder starts with. As pre-training, this hands supervised training
-a slightly worse starting point, which supervised training, moving the encoder five times
-further, simply overwrites. As post-training, it leaves the verb grouping intact but
+a slightly worse starting point. Supervised training then moves the encoder about five
+times further than SSL did and ends at a solution indistinguishable from the one it reaches
+from a random start. As post-training, it leaves the verb grouping intact but
 shifts the features under heads that cannot follow ($-1.34$\pp). In neither case does the
 objective add anything the supervised signal lacks. The result is a null on two feature tracks. The neighbour-label probe
 predicts this outcome cheaply: it needs no supervised run, and in both settings its sign

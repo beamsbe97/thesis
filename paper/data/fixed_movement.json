@@ -27,5 +27,17 @@
   "student": 0.04595373943448067,
   "ema": 0.04484223201870918,
   "head_ema": 0.09178348630666733
+ },
+ "P3 stage B, supervised from the SSL weights (SlowFast, mean of 3 seeds)": {
+  "ema": 0.23556986451148987,
+  "per_seed": [
+   0.2340221405029297,
+   0.23460246622562408,
+   0.23808498680591583
+  ]
+ },
+ "P3 stage B, supervised from the SSL weights (VideoMAE-L temporal / spatial)": {
+  "ema_temporal": 0.2325173169374466,
+  "ema_spatial": 0.23383744060993195
  }
 }

@@ -50,7 +50,11 @@ def load(name):
 
 
 def save(fig, name):
+    """Vector PDF for the paper + a PNG copy (figs/png/) for Markdown docs."""
     fig.savefig(os.path.join(FIGS, name), bbox_inches='tight', pad_inches=0.02)
+    os.makedirs(os.path.join(FIGS, 'png'), exist_ok=True)
+    fig.savefig(os.path.join(FIGS, 'png', name.replace('.pdf', '.png')), dpi=200,
+                bbox_inches='tight', pad_inches=0.05, facecolor='white')
     plt.close(fig)
     print('wrote', name)
 
@@ -166,20 +170,21 @@ def fig_trajectories():
 def fig_movement():
     M = load('fixed_movement.json')
     E1 = C['epoch1_avg_loss']
-    fig, axs = plt.subplots(1, 2, figsize=(FULL_W * 0.82, 2.1), gridspec_kw={'width_ratios': [1.35, 1.0]})
+    fig, axs = plt.subplots(1, 2, figsize=(FULL_W * 0.86, 2.2), gridspec_kw={'width_ratios': [1.5, 1.0]})
     ax = axs[0]
-    rows = [('super-\nvised', M['supervised (SlowFast, 21 ep)']['ema'], GRAY),
-            ('P3\nSlowFast', M['P3 SSL, SlowFast']['ema'], BLUE),
-            ('P3\nVideoMAE', M['P3 SSL, VideoMAE-L']['ema'], BLUE),
-            ('P2\n(from sup.)', M['P2 SSL post-training (SlowFast)']['ema'], ORANGE),
-            ('P3, post-\ntrain recipe', M['P3 SSL, post-training recipe (SlowFast)']['ema'], AQUA)]
+    rows = [('sup.\nfrom\nrandom', M['supervised (SlowFast, 21 ep)']['ema'], GRAY),
+            ('sup.\nfrom\nSSL', M['P3 stage B, supervised from the SSL weights (SlowFast, mean of 3 seeds)']['ema'], TEXT2),
+            ('SSL\nSlow-\nFast', M['P3 SSL, SlowFast']['ema'], BLUE),
+            ('SSL\nVideo-\nMAE', M['P3 SSL, VideoMAE-L']['ema'], BLUE),
+            ('P2\nSSL', M['P2 SSL post-training (SlowFast)']['ema'], ORANGE),
+            ('SSL,\npost-tr.\nrecipe', M['P3 SSL, post-training recipe (SlowFast)']['ema'], AQUA)]
     x = np.arange(len(rows))
     ax.bar(x, [100 * r[1] for r in rows], 0.6, color=[r[2] for r in rows])
     for xi, r in zip(x, rows):
         ax.text(xi, 100 * r[1] * 1.15, '%.1f%%' % (100 * r[1]) if r[1] >= 0.01 else '%.2f%%' % (100 * r[1]),
                 ha='center', va='bottom', fontsize=6, color=TEXT2)
     ax.set_yscale('log'); ax.set_ylim(0.2, 60)
-    ax.set_xticks(x); ax.set_xticklabels([r[0] for r in rows], fontsize=5.3)
+    ax.set_xticks(x); ax.set_xticklabels([r[0] for r in rows], fontsize=5.6)
     ax.set_ylabel('backbone change (%)')
     ax.set_title('(a) encoder change from start')
     ax.grid(axis='x', visible=False)

@@ -132,6 +132,10 @@ neck, 207 tensors), so weights transfer; only the heads differ.
   transferred backbone moves 4.4% (SF) / 4.8% (VM temporal) / 4.5% (VM spatial)
   from init, head 8-9%; supervised training moves it ~23%. P2 moves the supervised
   encoder 0.87%. (`paper/data/fixed_movement.json`)
+- **Stage B moves the encoder 23-24% away from the SSL weights** (SF seeds 23.4 /
+  23.5 / 23.8%, VM temporal / spatial 23.3 / 23.4%; `tools/weight_distance.py`,
+  `figs/stageB_distance_from_ssl.json`) = as far as P1 from random init (22.6%) and
+  ~5x the SSL stage's movement -> paper Fig. 4a and §6.4.
 - **Neighbour-label probe** (`tools/knn_label_agreement.py`, level-0 features, k=10,
   lift over chance, cross-video / within-video; `figs/knn_label_*.json`):
   SlowFast input .314/.391, random .311/.394, **NeCo SSL .261/.340**, supervised
