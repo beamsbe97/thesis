@@ -42,8 +42,10 @@ baselines and the NeCo/VOC control (`neco_diag/`) are unaffected. Use only the
 - `vjepa2/` — Meta's V-JEPA2 codebase, used only as a frozen feature extractor.
 - `current_lit.md` — running research notes/log (dated entries).
 - `feature_ideas.md` — brainstormed directions for improving the *features*.
-- `report.md` (root) — long-form experiment log; its body describes the
-  **pre-fix** runs (see its header). `actionformer/report.md` is older still.
+- `report.md` (root) — corrected results with every paper figure, a metric glossary
+  and how to read each figure. The old pre-fix report is in git history
+  (`git show 89b5c89:report.md`). `actionformer/report.md` is an older, superseded
+  write-up.
 
 ## Data & features
 
